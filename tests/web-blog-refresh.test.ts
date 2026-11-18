@@ -94,7 +94,9 @@ function makeAllFail(): void {
     router = () => { throw new Error("network down"); };
 }
 
+const savedRefresh = process.env.BILI_PUBLIC_METADATA_REFRESH;
 beforeEach(() => {
+    process.env.BILI_PUBLIC_METADATA_REFRESH = "1";
     outsideDir = mkdtempSync(join(tmpdir(), "bili-blogrefresh-"));
     pkgRoot = join(outsideDir, "pkg");
     const posts = join(pkgRoot, "website", "blog", "posts");
@@ -115,6 +117,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    if (savedRefresh === undefined) delete process.env.BILI_PUBLIC_METADATA_REFRESH;
+    else process.env.BILI_PUBLIC_METADATA_REFRESH = savedRefresh;
     if (origFetch !== undefined) globalThis.fetch = origFetch;
     _setBlogRootForTest(null);
     _resetBlogRefreshForTest();
@@ -324,6 +328,14 @@ test("manifest-recorded discussion number passes through to the feed item verbat
     const plain = byId.get("2026-10-09_nofresh"); // no slug ⇒ id keeps the filename stem
     assert.equal(plain?.kind, "article");
     assert.ok(!JSON.stringify(plain).includes("\"discussion\""), "unrecorded article serializes WITHOUT the key (client hides the button)");
+});
+
+test("public feed refresh disabled by policy skips panel warm-up and scheduled pulls", async () => {
+    process.env.BILI_PUBLIC_METADATA_REFRESH = "0";
+    warmBlogRefreshOnce();
+    kickBlogRefresh({ force: true });
+    assert.deepEqual(await runBlogRefreshRound({ force: true }), { ok: false, error: "disabled" });
+    assert.deepEqual(hits, []);
 });
 
 test("disabled state short-circuits rounds without network (test escape hatch)", async () => {

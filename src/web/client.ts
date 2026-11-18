@@ -1581,7 +1581,7 @@ function changelogCatOf(rawLine) {
                         cb.innerHTML = "";
                     });
                 }
-                // #3235: ride the shared #3040 report wiring — copy diagnostics + prefilled
+                // #3235: ride the shared #3040 report wiring — copy diagnostics + blank
                 // GitHub issue link, cached per topic so the 5s overview poll stays cheap.
                 attachReportButtons("conflict-banner", cb);
             } else {
@@ -3815,7 +3815,7 @@ if (d.keepalive) kv(parts, t("det.keepalive"), d.keepalive.tierLabel + " · " + 
     }
     // #3040: generic report wiring shared by every warning banner — fetches the
     // topic's diagnostics report and binds #report-copy-btn (clipboard) +
-    // #report-issue-link (prefilled GitHub issue) inside the given container.
+    // #report-issue-link (blank GitHub issue) inside the given container.
     // The overview poll re-renders banners every 5s while degraded, so the
     // fetch is cached per topic (60s): without it each refresh re-hit
     // /__bili/diagnostics — a full server-side blob rebuild (listSessions +

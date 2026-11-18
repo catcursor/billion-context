@@ -7,8 +7,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { defaultConfig } from "acp-kernel";
-import { selfAddressedLocalPath, startServer } from "../src/server.ts";
-import type { ProxyOptions } from "../src/config.ts";
+import { buildForwardTarget, selfAddressedLocalPath, startServer } from "../src/server.ts";
+import { loadOptions, type ProxyOptions } from "../src/config.ts";
 import { SessionStore, _setStoreForTest } from "../src/persist.ts";
 import { _setForTest as setRegistryForTest } from "../src/registry.ts";
 import { rmrf } from "./tmp-rm.ts";
@@ -30,6 +30,22 @@ async function waitReady(port: number): Promise<void> {
  *  like direct origin-form requests — while every #409 security property
  *  (self-layer denial of explicit wrappers, remote-peer marker, hostname
  *  marker) stays intact. */
+
+test("inter-instance probes retain the tunnel marker unless the original request is trusted", () => {
+    const opts = loadOptions({ ACP_HOST: "127.0.0.1" });
+    const upstream = "http://127.0.0.1:8788";
+    const route = { upstream, rewrittenUrl: upstream + "/__bili/health", tunnel: true };
+    const base = { host: "localhost" };
+    for (const [headers, expected] of [
+        [base, undefined],
+        [{ host: "untrusted.example.invalid" }, "1"],
+        [{ ...base, origin: "https://untrusted.example.invalid" }, "1"],
+        [{ ...base, "x-bili-tunnel": "1" }, "1"],
+    ] as const) {
+        const req = { headers, socket: { remoteAddress: "127.0.0.1" } } as http.IncomingMessage;
+        assert.equal(buildForwardTarget(req, opts, route).headers["x-bili-tunnel"], expected);
+    }
+});
 
 test("selfAddressedLocalPath: self-addressed absolute-form requests only", () => {
     const P = 8787;

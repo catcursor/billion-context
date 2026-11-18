@@ -6,12 +6,13 @@
  *
  * Fail-soft by contract, mirroring the release-notes watcher discipline in
  * src/update-notes.ts but kept in-memory only (no disk cache files, no config
- * keys, no env vars): one network hit per THROTTLE_MS window; every failure —
+ * keys for storage): one network hit per THROTTLE_MS window; every failure —
  * offline, HTTP error, malformed document — degrades to the cached view with
  * `error: "offline"` and never throws into the caller. A GitHub failure must
  * never break the panel or the status endpoint.
  */
 import type { ServerResponse } from "node:http";
+import { publicMetadataRefreshEnabled } from "../knobs.js";
 import { fetchWithTimeout } from "../fetch-util.js";
 import { log as loggerLog } from "../logger.js";
 
@@ -133,6 +134,7 @@ export function warmChangelogOnce(): void {
  *  `force` bypasses the window). Never throws: offline/malformed sources
  *  yield `{ releases: <cached>, error: "offline" }`. */
 export async function getChangelog(opts?: { force?: boolean }): Promise<ChangelogData> {
+    if (!publicMetadataRefreshEnabled()) return { releases: state.releases };
     const stale = Date.now() - state.lastCheckAt >= THROTTLE_MS;
     if ((opts?.force ?? false) || stale) {
         if (inflight === undefined) {

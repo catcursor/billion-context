@@ -5,8 +5,7 @@
 // the storage report now passes the same unconditional publish-boundary net as
 // the rest: credential shapes scrubbed, non-public URL hosts masked, and user-
 // identifying $HOME prefixes rewritten to ~ — regardless of the local
-// BILI_LOG_MASK_HOSTS preference, and equivalently in the copied blob AND the
-// prefilled issue body.
+// BILI_LOG_MASK_HOSTS preference. The issue link is a blank form.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
@@ -146,7 +145,7 @@ test("#4427 storage-legacy-only blob leaks no credentials, private hosts, or hom
             if (l.startsWith("[storage] ")) assert.ok(l.length <= 240, `published [storage] line bounded, got ${l.length}`);
         }
 
-        assert.equal(new URL(rep.url).searchParams.get("body"), rep.blob, "issue body decodes back to the exact (redacted) blob");
+        assert.equal(rep.url, "https://github.com/ranxianglei/billion-context/issues/new");
     } finally {
         rmSync(root, { recursive: true, force: true });
         rmSync(home, { recursive: true, force: true });

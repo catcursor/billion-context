@@ -38,6 +38,7 @@
  *   exactly like the disk path) and an absent articles.json (posts-only
  *   round).
  */
+import { publicMetadataRefreshEnabled } from "../knobs.js";
 import { fetchWithTimeout } from "../fetch-util.js";
 import { log as loggerLog } from "../logger.js";
 import {
@@ -131,8 +132,9 @@ function armSchedule(): void {
  *  server warm-up). Never throws: coalesces onto an in-flight round, skips
  *  silently outside the TTL unless force. */
 export function kickBlogRefresh(opts?: { force?: boolean }): void {
-    armSchedule(); // first touch in this process arms the hourly chain
-    if (disabled || inflight !== undefined) return;
+    if (disabled || !publicMetadataRefreshEnabled()) return;
+    armSchedule();
+    if (inflight !== undefined) return;
     const due = (opts?.force ?? false) || Date.now() - lastRoundStartedAt >= ROUND_TTL_MS;
     if (!due) return;
     lastRoundStartedAt = Date.now();
@@ -149,7 +151,7 @@ export function kickBlogRefresh(opts?: { force?: boolean }): void {
  *  kickBlogRefresh. Resolves with a snapshot of what happened — never
  *  rejects; failure details land in the registered feed error marker. */
 export async function runBlogRefreshRound(opts?: { force?: boolean }): Promise<{ ok: boolean; error?: string }> {
-    if (disabled) return { ok: false, error: "disabled" };
+    if (disabled || !publicMetadataRefreshEnabled()) return { ok: false, error: "disabled" };
     armSchedule();
     if (inflight === undefined && !((opts?.force ?? false) || Date.now() - lastRoundStartedAt >= ROUND_TTL_MS)) {
         return { ok: true }; // within TTL and nothing running — nothing to do

@@ -68,6 +68,7 @@
 
 | Key | Type | Default | Env | Description |
 |-----|------|---------|-----|-------------|
+| `publicMetadataRefresh` | boolean | false | BILI_PUBLIC_METADATA_REFRESH | 启用后会从 models.dev 获取模型目录，并从 GitHub 刷新博客和更新日志。这些服务可以看到来源 IP 和请求时间。环境变量设为 1 可启用。 |
 | `port` | number | 8787 | ACP_PORT, PORT | 代理监听端口（用户区；车道派生代理使用 BILI_ZONE_PORT，互不干扰）。 |
 | `host` | string | 127.0.0.1 | ACP_HOST | 绑定地址。127.0.0.1 仅本机回环；:: 双栈；0.0.0.0 对外暴露（无鉴权，仅限可信网络）。 |
 | `sessionHeader` | string | x-acp-session | ACP_SESSION_HEADER | 携带会话 id 的请求头；相同取值的请求共享压缩状态。 |
@@ -233,7 +234,7 @@
 
 | Key | Type | Default | Env | Description |
 |-----|------|---------|-----|-------------|
-| `autoUpdate` | boolean | true | ACP_AUTO_UPDATE | 自动 npm 版本检查（约每 3 分钟）；ACP_AUTO_UPDATE=0 或 --no-auto-update 关闭。 |
+| `autoUpdate` | boolean | false | ACP_AUTO_UPDATE | 自动 npm 版本检查（约每 3 分钟）；ACP_AUTO_UPDATE=1 开启。 |
 | `autoRestartOnUpdate` | boolean | false | ACP_AUTO_RESTART_ON_UPDATE | 新版本装好后自动重启守护进程。 |
 | `updateTag` | string | latest | ACP_UPDATE_TAG | 自更新的 npm dist-tag 通道：latest（默认）、dev 或 pr。 |
 | `update` | object | {} (all defaults) | — | 自更新通道设置。 |
@@ -242,10 +243,10 @@
 | `update.staggerMinDelayMs` | number \| string | 900000 (built-in 15 min) | BILI_UPDATE_STAGGER_MIN_MS | #3619 错峰升级：本机基础升级延迟窗口下限；毫秒数字或时长字符串（15m / 2d / 1d12h）；0 = 禁用延迟（恢复立即升级）。远端策略的 default 窗口与按版本 overrides 叠加在其上。 |
 | `update.staggerMaxDelayMs` | number \| string | 172800000 (built-in 48 h) | BILI_UPDATE_STAGGER_MAX_MS | #3619 错峰升级：本机基础升级延迟窗口上限；毫秒数字或时长字符串（48h / 2d）；与 min=0 一起恢复立即升级。 |
 | `update.policyUrl` | string | official repo raw URL | BILI_UPDATE_POLICY_URL | 远端自动更新策略文件的覆盖地址（测试接缝——生产固定指向官方仓库）。 |
-| `advisoryCheck` | boolean | true | BILI_ADVISORY_CHECK | 关键缺陷公告监视器；本机版本命中受影响范围时装填推荐修复版本。 |
+| `advisoryCheck` | boolean | false | BILI_ADVISORY_CHECK | 关键缺陷公告监视器；本机版本命中受影响范围时装填推荐修复版本。 |
 | `advisoryUrl` | string | unset (built-in feed) | BILI_ADVISORY_URL | 公告源覆盖地址。 |
-| `remoteAnnouncementsUrl` | string | unset (official feed: GitHub master announcements/remote.json) | BILI_ANNOUNCEMENTS_URL | 远程公告源覆盖地址（#5548）：JSON 文档 {v: 1, entries: [...]}，记录格式与本地公告文件一致；与其他监视器一样约每 3 分钟拉取一次，缓存快照可跨重启/断网存活。无法直连的安装把它指向中继镜像；坏推送会被拒绝并继续显示上一份有效公告。配置目录 announcements/*.json 的本地文件按同 id 覆盖远程/内置公告。条目还可携带可选的 `requiresScan: { "client", "knownId"? }` 字段——实时冲突扫描门：只有该客户端的只读插件注册表扫描确实报告了对应插件（任一发现，或 `knownId` 匹配）时横幅才显示，否则保持隐藏；因此针对某台机器特定冲突的公告只会在冲突真实存在的机器上出现（#5984）。 |
-| `releaseNotesCheck` | boolean | true | BILI_RELEASE_NOTES_CHECK | Web 面板里的发布说明源（只抓取缓存、从不安装任何东西）。 |
+| `remoteAnnouncementsUrl` | string | unset (disabled) | BILI_ANNOUNCEMENTS_URL | 远程公告源覆盖地址（#5548）：JSON 文档 {v: 1, entries: [...]}，记录格式与本地公告文件一致；与其他监视器一样约每 3 分钟拉取一次，缓存快照可跨重启/断网存活。无法直连的安装把它指向中继镜像；坏推送会被拒绝并继续显示上一份有效公告。配置目录 announcements/*.json 的本地文件按同 id 覆盖远程/内置公告。条目还可携带可选的 `requiresScan: { "client", "knownId"? }` 字段——实时冲突扫描门：只有该客户端的只读插件注册表扫描确实报告了对应插件（任一发现，或 `knownId` 匹配）时横幅才显示，否则保持隐藏；因此针对某台机器特定冲突的公告只会在冲突真实存在的机器上出现（#5984）。 |
+| `releaseNotesCheck` | boolean | false | BILI_RELEASE_NOTES_CHECK | Web 面板里的发布说明源（只抓取缓存、从不安装任何东西）。 |
 | `releaseNotesUrl` | string | unset (built-in feed) | BILI_RELEASE_NOTES_URL | 发布说明源覆盖地址。 |
 
 **诊断与调优**
@@ -752,9 +753,9 @@
 ### `autoUpdate`
 
 - **类型：** `boolean`
-- **默认值：** `true`
+- **默认值：** `false`
 - **状态：** ACTIVE
-- **说明：** 周期性 npm registry 版本检查（每 `update.checkIntervalMs`，默认 3 分钟；每进程首次检查忽略节流）。检测所配 `updateTag` 通道上的新版本构建；运行进程是否真正换装取决于 `autoRestartOnUpdate`（自我重启）或公告通道（强制安装）。`ACP_AUTO_UPDATE=0` 关闭。独立于 `advisoryCheck`：关闭自动更新的安装仍会经公告监视器被强制移出已知缺陷版本范围。自 #3619 起，发现新版本后不再立即应用——自动升级在随机延迟窗口内撒点执行（内置默认 15 分钟 – 48 小时，远程策略可调；见下文 [`update`](#update)），以便有问题发版能在铺满前拦下，而不是等全量升级完才发现。
+- **说明：** 开启定期 npm 更新。安装上游版本会覆盖加固代码。 `ACP_AUTO_UPDATE=1`.
 
 ### `autoRestartOnUpdate`
 
@@ -773,9 +774,9 @@
 ### `advisoryCheck`
 
 - **类型：** `boolean`
-- **默认值：** `true`
+- **默认值：** `false`
 - **状态：** ACTIVE
-- **说明：** 严重缺陷公告监视器（#1481）：轮询伴生包 `billion-context-advisories`（CI 从 `advisories/` 发布），运行版本落入声明的缺陷范围时强制安装钉死的 `target` 版本 —— 可能是**回滚**。独立于 `autoUpdate` 运行，所以关闭自动更新的安装也能被强制移出已知缺陷版本。fail-open：公告源不可达/格式错误只告警，绝不阻断模型流量。`BILI_ADVISORY_CHECK=0` 关闭。
+- **说明：** 开启独立的缺陷公告检查。命中公告时可能自动安装上游版本。 `BILI_ADVISORY_CHECK=1`.
 
 ### `advisoryUrl`
 
@@ -787,9 +788,9 @@
 ### `releaseNotesCheck`
 
 - **类型：** `boolean`
-- **默认值：** `true`
+- **默认值：** `false`
 - **状态：** ACTIVE
-- **说明：** release notes 可见性监视器（#1870）：拉取伴生文档 `billion-context-release-notes`，且仅当待更新区间含 `critical` 级条目时，才在 `acp_status` 与 `/acp` 面板显示 "CRITICAL update ready — restart to finish" 或 "critical update available" —— 常规版本从不显示（设计上即静默，#1977）。不安装、不重启；fail-open。`BILI_RELEASE_NOTES_CHECK=0` 关闭。
+- **说明：** 开启定期下载发布说明。 `BILI_RELEASE_NOTES_CHECK=1`.
 
 ### `releaseNotesUrl`
 
@@ -1898,7 +1899,7 @@ ACP 原生 agent（当前为 `pi` 扩展）会在每个进程内向代理上报�
 |---------|------------|--------|
 | `` | `pi.commands` | ["acp", "acp-cache"] |
 | `ACP_AUTO_RESTART_ON_UPDATE` | `autoRestartOnUpdate` | false |
-| `ACP_AUTO_UPDATE` | `autoUpdate` | true |
+| `ACP_AUTO_UPDATE` | `autoUpdate` | false |
 | `ACP_COMPRESS_NUDGE` | `compress.injectNudge` | true |
 | `ACP_COMPRESS_PROTOCOL` | `diagnostics.compressProtocol` | "tools" |
 | `ACP_COMPRESS_TOOL` | `compress.injectTool` | true |
@@ -1923,12 +1924,12 @@ ACP 原生 agent（当前为 `pi` 扩展）会在每个进程内向代理上报�
 | `ACP_SESSION_HEADER` | `sessionHeader` | x-acp-session |
 | `ACP_UPDATE_TAG` | `updateTag` | latest |
 | `ACP_UPSTREAM` | `upstream` | https://api.anthropic.com |
-| `BILI_ADVISORY_CHECK` | `advisoryCheck` | true |
+| `BILI_ADVISORY_CHECK` | `advisoryCheck` | false |
 | `BILI_ADVISORY_URL` | `advisoryUrl` | unset (built-in feed) |
 | `BILI_AFFINITY_SIMHASH` | `affinitySimhash` | true |
 | `BILI_ALLOW_DSH_COMPACTION` | `dsh` | {} |
 | `BILI_ALLOW_PRIVATE_HTTP_PROVIDERS` | `network.allowPrivateHttpProviders` | false |
-| `BILI_ANNOUNCEMENTS_URL` | `remoteAnnouncementsUrl` | unset (official feed: GitHub master announcements/remote.json) |
+| `BILI_ANNOUNCEMENTS_URL` | `remoteAnnouncementsUrl` | unset (disabled) |
 | `BILI_AUTO_MODE_FORGE` | `autoModeForge.enabled` | true |
 | `BILI_CACHE_KEEPALIVE` | `cacheKeepalive.enabled` | false |
 | `BILI_CACHE_KEEPALIVE_ARM_WITHOUT_BREAKPOINTS` | `cacheKeepalive.armWithoutBreakpoints` | false |
@@ -2000,9 +2001,10 @@ ACP 原生 agent（当前为 `pi` 扩展）会在每个进程内向代理上报�
 | `BILI_PREFLIGHT_DEAD_END_COOLDOWN_MS` | `network.preflightDeadEndCooldownMs` | 300000 |
 | `BILI_PREFLIGHT_HOLD_MS` | `network.preflightHoldMs` | 30000 |
 | `BILI_PROXY_KEEPALIVE_MAX_MS` | `network.proxyKeepAliveMaxMs` | 55000 (0 = one-shot connections) |
+| `BILI_PUBLIC_METADATA_REFRESH` | `publicMetadataRefresh` | false |
 | `BILI_PUBLIC_SNAPSHOT_CAP_BYTES` | `plugin.snapshotCapBytes` | 104857600 (0 disables snapshots) |
 | `BILI_RECEIVE_BODY_BYTES` | `network.receiveBodyBytes` | 5368709120 |
-| `BILI_RELEASE_NOTES_CHECK` | `releaseNotesCheck` | true |
+| `BILI_RELEASE_NOTES_CHECK` | `releaseNotesCheck` | false |
 | `BILI_RELEASE_NOTES_URL` | `releaseNotesUrl` | unset (built-in feed) |
 | `BILI_REPLAY_RETRY_BASE_MS` | `network.replayRetryBaseMs` | 1500 (0 disables the delay) |
 | `BILI_REPLAY_RETRY_MAX` | `network.replayRetryMax` | 3 (1 disables replays) |
@@ -2083,7 +2085,7 @@ ACP 原生 agent（当前为 `pi` 扩展）会在每个进程内向代理上报�
 | `ACP_HOST` | 覆盖监听主机。 |
 | `ACP_UPSTREAM` | 覆盖默认上游 base URL。 |
 | `ACP_LOG` | 设为 `0` 关闭请求日志。 |
-| `ACP_AUTO_UPDATE` | 设为 `0` 禁用自动更新检查。文件配置键：`autoUpdate`。 |
+| `ACP_AUTO_UPDATE` | `1` — 开启定期 npm 更新。安装上游版本会覆盖加固代码。 |
 | `ACP_AUTO_RESTART_ON_UPDATE` | 设为 `1`（任意非 `0` 值）启用自动更新安装后的自我重启（#811）：重启要求零在途请求、通过安装自检、遵守 10 分钟冷却标记，失败时恢复原监听器。文件配置键：`autoRestartOnUpdate`。 |
 | `ACP_UPDATE_TAG` | 自动更新跟随的 dist-tag 通道（默认 `latest`，如 `dev`）。文件配置键：`updateTag`。滚动 `pr` tag 指向所有 PR 中最新的测试构建；旧版按 PR 划分的 `pr-N` tag 已冻结在该 PR 的最后一个构建，仅在显式配置时才会被跟随。滚动 `master` tag 指向最新合入 master 的构建——每次非 release 合并都会发布一个（#2049）；设置它即可跟随已合并但未正式发布的状态。 |
 | `BILI_UPDATE_REGISTRY` | 自动更新与 `bili update` 使用的 npm registry base URL 覆盖（默认 `https://registry.npmjs.org`）。仅供 hermetic 测试指向回环 registry（`ACP_TEST_REGISTRY` e2e 套件自带的 verdaccio 实例）；生产环境请勿设置（#1153）。 |
@@ -2094,9 +2096,9 @@ ACP 原生 agent（当前为 `pi` 扩展）会在每个进程内向代理上报�
 | `BILI_MODEL_INFO_RETRY_MS` | dsh 原生模型窗口解析失败（或解析结果不带窗口）后的重试冷却（毫秒，#1812/#1836）：匹配的缓存条目没有 context window 时不视为最终结果 —— 不再让整个进程生命周期 latching 成无 header 状态，而是该冷却过期后由下一个请求触发重新解析。默认 `30000`；非数字或负值回退 `30000`。测试钩子 —— dsh-native 单元测试用它缩短冷却、避免真实等待；生产环境保持 unset。 |
 | `BILI_DSH_RETRY_INTERVAL_MS` | dsh 原生插件工具注册重试的退避冷却（毫秒，#2082）：manifest 拉取或工具注册瞬时失败后，下一次重试不早于该冷却发生。默认 `10000`；非数字或非正值回退 `10000`。测试钩子 —— dsh-native 单元测试用它缩短冷却、避免真实等待；生产环境保持 unset。 |
 | `BILI_DSH_RECOVERY_INTERVAL_MS` | dsh 原生插件独立恢复定时器的间隔（毫秒，#2082）：工具处于 down 状态时，即使零模型流量也持续驱动注册重试 —— 正是模型已放弃缺失工具、其他路径都不会再触发重试的场景。默认跟随 `BILI_DSH_RETRY_INTERVAL_MS`（`10000`）。测试钩子 —— NODE_TEST_CONTEXT 下除非显式设置本变量，否则定时器永不启动；生产环境保持 unset。 |
-| `BILI_ADVISORY_CHECK` | 设为 `0` 禁用严重缺陷公告监视器（#1481）。默认开启 —— 它独立于 `ACP_AUTO_UPDATE` 运行，确保关闭了自动更新的安装也能被强制移出已知缺陷版本范围。fail-open：公告源不可达/格式错误只告警，绝不阻断模型流量。文件配置键：`advisoryCheck`。 |
+| `BILI_ADVISORY_CHECK` | `1` — 开启独立的缺陷公告检查。命中公告时可能自动安装上游版本。 |
 | `BILI_ADVISORY_URL` | 公告文档 URL 覆盖。默认：已配置 registry（感知 `BILI_UPDATE_REGISTRY`）上的伴生包 `billion-context-advisories`。文件配置键：`advisoryUrl`。 |
-| `BILI_RELEASE_NOTES_CHECK` | 设为 `0` 禁用发版说明可见性监视器（#1870）。默认开启 —— 纯可见性，且默认静默（#1977）：拉取伴生发版说明文档，仅当待更新跨度内含 `critical` 级条目时，才在 `acp_status` 与 `/acp` 面板提示「CRITICAL 更新已就绪待重启」（磁盘版本新于运行版本）或「存在 critical 更新」；routine/recommended 级发版永不上屏。绝不安装、绝不重启；fail-open。文件配置键：`releaseNotesCheck`。 |
+| `BILI_RELEASE_NOTES_CHECK` | `1` — 开启定期下载发布说明。 |
 | `BILI_RELEASE_NOTES_URL` | 发版说明文档 URL 覆盖。默认：已配置 registry（感知 `BILI_UPDATE_REGISTRY`）上的伴生包 `billion-context-release-notes`。文件配置键：`releaseNotesUrl`。 |
 | ~~`BILI_HOST_USAGE_CREDIT`~~ / ~~`hostUsageCredit`~~ | **#660 已移除。** 曾用于选择宿主可见的用量模式。#408 的未折叠基线回补（backfill）已整体删除 —— 所有宿主现在统一上报“实际转发（后折叠）请求”的 provider 实测用量，与 `[acp-usage] input=` 一致。遗留该环境变量 / 配置键的旧值会被忽略，请删除。教训详见 PR #691 的 “Bug 历史教训” 一节。 |
 | `ACP_PROVIDERS` | 指向外部 `providers.json` 的路径（旧版 / 共享文件）。 |

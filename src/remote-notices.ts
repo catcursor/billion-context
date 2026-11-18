@@ -16,21 +16,10 @@ import { CHECK_INTERVAL_MS, egressDispatcher } from "./update.js";
 import type { NoticeRecord } from "./announcements.js";
 import { noticePassesGates, announcementPayload, validateRecord, contentHash16 } from "./announcements.js";
 
-/** Official feed location (trust boundary = who can push to this repo). */
-export const DEFAULT_ANNOUNCEMENTS_URL = "https://raw.githubusercontent.com/ranxianglei/billion-context/master/announcements/remote.json";
 const MAX_REMOTE_BYTES = 512 * 1024;
 const MAX_ENTRIES = 50;
 const SUPPORTED_VERSION = 1;
 const DEFAULT_TIMEOUT_MS = 8000;
-
-/** Explicit override wins verbatim (config `remoteAnnouncementsUrl` / env
- *  BILI_ANNOUNCEMENTS_URL — firewall installs point this at their own relay);
- *  absent = the official raw URL. */
-export function resolveAnnouncementsUrl(configured: string | undefined): string {
-    const v = configured?.trim();
-    return v ? v : DEFAULT_ANNOUNCEMENTS_URL;
-}
-
 
 /** Stream-read `body` and UTF-8-decode it, rejecting once accumulated bytes
  *  exceed `maxBytes` — so a feed whose Content-Length lies (or is absent/
@@ -142,7 +131,7 @@ async function writeSnapshot(text: string): Promise<void> {
 }
 
 type RemoteNoticesOptions = {
-    /** Resolved-or-raw announcements URL override (see resolveAnnouncementsUrl). */
+    /** Feed URL explicitly selected by the operator. */
     remoteAnnouncementsUrl?: string;
     resolveProxy?: (url: string) => string | undefined;
     /** Test seam: override the 8s fetch timeout. */
@@ -155,7 +144,8 @@ type RemoteNoticesOptions = {
  *  doc (memory first, snapshot file after restart); first-ever failure with
  *  no snapshot yields "no remote source" for this cycle. */
 export async function runRemoteNoticesCheck(opts: RemoteNoticesOptions, force = false): Promise<void> {
-    if (inFlight) return;
+    const url = opts.remoteAnnouncementsUrl?.trim();
+    if (!url || inFlight) return;
     inFlight = true;
     const log = opts.log ?? loggerLog;
     try {
@@ -167,7 +157,6 @@ export async function runRemoteNoticesCheck(opts: RemoteNoticesOptions, force = 
 
         let text: string;
         try {
-            const url = resolveAnnouncementsUrl(opts.remoteAnnouncementsUrl);
             const dispatcher = egressDispatcher({ resolveProxy: opts.resolveProxy }, url);
             const init: FetchOptions = {
                 method: "GET",
@@ -285,7 +274,7 @@ export function _resetRemoteNoticesForTest(): void {
 }
 
 export function startRemoteNoticesWatcher(opts: RemoteNoticesOptions): void {
-    if (timer) return;
+    if (timer || !opts.remoteAnnouncementsUrl?.trim()) return;
     loggerLog("info", `[notices] remote feed watcher enabled (checking every ${CHECK_INTERVAL_MS / 1000 | 0}s)`);
     setTimeout(() => {
         void runRemoteNoticesCheck(opts);

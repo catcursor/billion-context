@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-<code>npm install -g billion-context --prefix=~/.local</code>
+<a href="#构建隐私加固版">构建隐私加固版</a>
 </p>
 
 <p align="center">
@@ -126,19 +126,19 @@ QQ群:
 **原生模式 vs 独立扩展。** 宿主原生插件(`bili plugin install …`)与独立进程内扩展(`billion-context-pi`、`opencode-acp`)**互斥** —— 两者同时生效意味着双重压缩。安装器负责切换:替换旧条目(裸名、`npm:` 别名、带版本号、路径形式都认,数组/对象两种形态都处理),原配置快照到 `.bili-bak`;**项目级**安装不会被碰 —— 需手动移除。作为手动安装的运行期安全网,原生入口在加载时同步设置 `BILLION_CONTEXT_NATIVE=<host>`,让独立扩展在动作时自动退出。pi 一侧该标记需要 `billion-context-pi` **0.1.72+**。
 
 
-## 安装
+## 构建隐私加固版
 
-Linux / macOS —— 指定用户级 prefix 安装(全程不需要 `sudo`，也不改你的 npm 配置，`bili` 自更新不会再遇到权限问题)：
+使用 Node.js 24。npm 上的同名包和部分客户端的原生插件安装器会获取上游发行版。更新加固版时，请从此 fork 拉取代码并重新构建。
 
 ```bash
-npm install -g billion-context --prefix=~/.local
+git clone https://github.com/catcursor/billion-context.git
+cd billion-context
+npm ci --ignore-scripts
+npm run build
+node dist/index.js --help
 ```
 
-`bili` 命令装在 `~/.local/bin`——多数发行版默认已在 PATH 中；没有的话把 `export PATH="$HOME/.local/bin:$PATH"` 写进 `~/.bashrc` 或 `~/.zshrc`。用 nvm 或 Homebrew Node 的，默认 prefix 本来就属于当前用户，直接 `npm install -g billion-context` 即可；Windows 的默认 prefix(`%APPDATA%\npm`)同样用户可写，直接 `npm install -g billion-context`。
-
-这会安装 `bili` 命令(`bili-proxy` 保留为别名)。旧装的是 root 属主的 prefix、现在报 `EACCES`?用 `--prefix=~/.local` 重装即可根治(以后用 npm 重装 `bili` 时记得同样带上该参数)——不要用 `sudo`。
-
-想用容器?仓库根目录自带 `Dockerfile`——见下文[在 Docker 中运行](#在-docker-中运行)。
+用 `node dist/index.js start` 启动代理。你配置的模型服务会收到对话，本机会话库和日志也可能含有敏感内容。此 fork 默认关闭 npm 自动更新、缺陷公告检查、发布说明和公共元数据刷新。要接收远程通知，需要配置公告源地址。
 
 ## 快速上手
 
@@ -268,21 +268,6 @@ curl -s http://localhost:8787/__bili/stats
 
 一行带不过来的细节 —— 各模式(启动器 / `/bili/` URL 前缀 / 原生插件)如何把流量接进代理、往哪儿写了什么、已知局限有哪些 —— 都在 **[docs/clients.zh-CN.md](docs/clients.zh-CN.md)**:dsh · Kimi Code · Hermes · ZCode · Gemini 系(Gemini CLI / iFlow CLI / Qwen Code / Antigravity)· CONNECT 盲隧道接入但从不压缩的客户端(#897)· 未识别端点直连(#1290)· OpenCode(启动器 / 原生 / 纯代理、`/acp` 状态与规则、旧 opencode-acp 会话 #920)。
 
-## 从源码安装(开发)
-
-> **风险**:`master` 是开发分支,随时可能处于不可用状态——未发布的改动、跑不过的构建、未验证的修复都可能出现。除非你要改代码、或验证一个还没发布的修复,否则请用上面的 npm 方式装发布版。
-
-```bash
-git clone https://github.com/ranxianglei/billion-context.git
-cd billion-context
-npm ci
-npm run build
-npm link
-bili --version
-```
-
-`npm link` 之后,在任何目录都能直接用 `bili`。
-
 ## 常见问题
 
 **怎么查缓存命中率？** 不用翻日志——`/acp-cache` 直接在客户端里打一份**文字总结报告**，顶部带一个可点击的 **Web UI 链接**，点进去是网页版会话页（**折线图 + 逐断点归因**）：
@@ -312,11 +297,11 @@ bili --version
 
 ### 在 Docker 中运行
 
-仓库根目录自带 `Dockerfile`——构建期从 npm 装已发布的包(被测试过的产物;镜像里不编译任何东西),把代理作为服务跑起来:
+在当前源码目录构建镜像，即可包含此 fork 的隐私修复。
 
 ```bash
 docker build -t billion-context .
-docker run -d --name bili -p 8787:8787 \
+docker run -d --name bili -p 127.0.0.1:8787:8787 \
   -v bili-config:/root/.config/billion-context \
   -v bili-data:/root/.local/share/billion-context \
   -v bili-cache:/root/.cache/billion-context \
@@ -324,12 +309,12 @@ docker run -d --name bili -p 8787:8787 \
   billion-context
 ```
 
-然后把客户端 baseURL 指到 `http://<host>:8787/bili/…`,和上面方式 3 完全一样。
+然后把客户端 baseURL 指到 `http://127.0.0.1:8787/bili/…`,和上面方式 3 完全一样。
 
 - **基础镜像:** `node:24-slim` —— 直接用内置 `node:sqlite` 存储引擎(不发生 native addon 下载)。不要换成 Node 20 基础镜像:自举下载的 SQLite 引擎要求 Node ≥ 22,在 20 上会崩(#3341)。
-- **更新:** 容器内自更新**默认关闭**(`ACP_AUTO_UPDATE=0`)——容器化副本的合法升级通道是重建/pull 新镜像;原地自更新会在下次重建时被静默回退到镜像版本。想开回来用 `-e ACP_AUTO_UPDATE=1`;构建期钉版本用 `--build-arg BILI_VERSION=0.1.197`(默认 `latest`)。
+- **更新:** 选择需要的 fork 提交，重新构建镜像。镜像设置了 `ACP_AUTO_UPDATE=0`。
 - **数据:** 四个挂载目录分别存放配置、会话状态、更新节流/锁 + 缓存的 SQLite 引擎、日志。挂 volume 或 bind mount 让它们跨容器替换存活;镜像也把这四个目录声明为 `VOLUME`,裸 `docker run` 也不会把它们落进容器层。
-- **安全:** 容器监听 `0.0.0.0:8787` 以便外部客户端接入——**没有认证**,端口只应暴露给可信网络(与下面 `--host 0.0.0.0` 的注意事项相同)。Web UI 和 `/__bili/*` JSON 端点经映射端口照常可用。
+- **安全:** 示例仅在宿主机回环地址发布端口。代理没有客户端认证。管理面板仅接受容器内的回环连接，经 Docker 网桥从宿主机访问可能会被拒绝。
 - **健康检查:** 镜像自带 `HEALTHCHECK`,用 node 内置 fetch 探 8787 上的 `/__bili/health`(slim 基础无需 curl);若覆盖监听端口,注意探针仍钉在 8787。
 
 ### 命令行参数
@@ -371,6 +356,8 @@ bili --no-auto-update        # 本次启动禁用自动更新
 
 ### 自动更新
 
+此 fork 默认关闭该功能。要启用，请设置 `ACP_AUTO_UPDATE=1`.
+
 代理启动时和每 3 分钟检查 npm 是否有新版本。发现新版本就原位安装并打印通知 —— **重启 `bili` 才能生效**,除非启用可选自重启(`--auto-restart-on-update` 参数 / `ACP_AUTO_RESTART_ON_UPDATE=1` 环境变量 / 配置 `"autoRestartOnUpdate": true`,默认关闭):零在途请求时校验新安装、停止接收连接、排空、在同一端口拉起替代进程并在其开始接受连接后退出(客户端自动重连;会话状态在磁盘上保留)。安全门:排空窗口全程零在途、re-exec 前安装完整性检查、10 分钟冷却标记防止版本抖动循环重启;任何失败恢复原监听器并回落到普通提醒。运行进程落后于磁盘安装("stale")时,Web UI 显示横幅,`GET /__bili/status` 返回 `{version, diskVersion, stale, autoRestartOnUpdate, advisory, updatePolicy, inFlight}` 供脚本使用(`advisory` 为生效中的严重缺陷公告或 `null`,见下节;`updatePolicy` 上报 #3619 撒点状态——策略来源、`hold`/`pinned`/`blocked`、以及待执行的撒点升级及其到点时刻)。永久禁用:配置(`"autoUpdate": false`)或环境变量(`ACP_AUTO_UPDATE=0`)。
 
 **升级撒点(#3619):** 发现新版本后,自动更新不再立即应用。每台实例在延迟窗口内随机抽取**一个**时刻(内置默认 **15 分钟 – 48 小时**),到点再升;抽中的时刻落盘持久化,重启不重摇。全量升级因此摊开在整个窗口内,而不是发版后十几分钟内全体升完,给坏发版留出中途拦截的响应窗(#3401/#3600/#3394)。窗口与紧急控制放在一个公开的策略文件里(本仓库的 `auto-update-policy.json`,匿名 GET + ETag 缓存):`hold` 全局冻结自动升级、`blocked` 跳过指定版本、`pinned` 设置升级天花板。按设计 fail-open——文件不可达或格式非法时直接回退本地默认;而且它只能调节奏/跳过/钉住,**永远控制不了装什么**。本机退出方式:手动 `bili update` 绕过 `hold`/撒点(但仍遵守 `blocked`/`pinned`)、`"staggerMinDelayMs": 0` + `"staggerMaxDelayMs": 0`(或 `BILI_UPDATE_STAGGER_MIN_MS`/`BILI_UPDATE_STAGGER_MAX_MS`)恢复旧版立即升级、`ACP_AUTO_UPDATE=0` 完全停用自动更新。完整格式与语义见 [docs/configuration.zh-CN.md → `update`](docs/configuration.zh-CN.md#update)。
@@ -390,6 +377,8 @@ bili --no-auto-update        # 本次启动禁用自动更新
 - **让出口走上游代理** —— `-F http://<host:port>` 或 `BILI_UPSTREAM_PROXY=… BILI_UPSTREAM_PROXY_MODE=auto`:目标改由那个上游代理远端解析,bili 准入时不再查询自己(已陈旧的)解析器。
 
 ### 严重缺陷公告(强制更新)
+
+此 fork 默认关闭该功能。要启用，请设置 `BILI_ADVISORY_CHECK=1`.
 
 独立于自动更新(#1481):即使关闭了 `autoUpdate`,代理也会按同样的 3 分钟节奏轮询一个小的伴生 npm 包(`billion-context-advisories`,由 CI 从本仓库的 [`advisories/`](advisories/) 目录发布)。每条公告指明受缺陷影响的版本范围(`affected`,semver)、应安装的确切版本(`target`,可以比当前版本**更旧**,即回滚),以及面向用户的缺陷说明(`reason`)。当本地版本落入 `affected` 范围时,bili 会走自更新的全套安全链路强制安装 `target`(跨进程锁、备份+校验+回滚;源码检出和宿主托管的安装会被拒绝并给出手动升级指引),并以警告方式呈现:
 

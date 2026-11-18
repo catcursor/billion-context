@@ -21,7 +21,9 @@ const PROXY_KEYS = ["https_proxy", "HTTPS_PROXY", "http_proxy", "HTTP_PROXY", "a
  *  restore function (call it in finally). */
 async function isolateLoaderEnv(): Promise<() => Promise<void>> {
     const cacheHome = await mkdtemp(path.join(tmpdir(), "bili-registry-test-"));
-    const saved = [...XDG_KEYS, ...PROXY_KEYS].map((k) => [k, process.env[k]] as const);
+    const saved = [...XDG_KEYS, ...PROXY_KEYS, "BILI_CONFIG_FILE", "BILI_PUBLIC_METADATA_REFRESH"].map((k) => [k, process.env[k]] as const);
+    process.env.BILI_CONFIG_FILE = path.join(cacheHome, "config.json");
+    process.env.BILI_PUBLIC_METADATA_REFRESH = "1";
     for (const key of PROXY_KEYS) delete process.env[key];
     for (const key of XDG_KEYS) process.env[key] = cacheHome;
     return async () => {
@@ -46,6 +48,25 @@ test("proxyDispatcher degrades to direct for an unsupported proxy scheme", () =>
     assert.ok(proxyDispatcher("http://127.0.0.1:10890"), "a supported origin still yields a dispatcher");
     assert.ok(proxyDispatcher("127.0.0.1:10890"), "a schemeless origin normalizes to http");
     resetProxyCache();
+});
+
+test("a default installation serves the bundled model catalog without a network request", async () => {
+    const restore = await isolateLoaderEnv();
+    const reg = await import("../src/registry.ts");
+    let calls = 0;
+    try {
+        delete process.env.BILI_PUBLIC_METADATA_REFRESH;
+        reg._resetForTest();
+        reg._setRegistryFetchForTest(async () => { calls++; throw new Error("unexpected fetch"); });
+        const catalog = await reg.loadRegistry();
+        assert.ok(catalog && Object.keys(catalog).length > 0);
+        assert.equal(await reg.loadRegistry(), catalog);
+        assert.equal(calls, 0);
+    } finally {
+        reg._setRegistryFetchForTest(undefined);
+        reg._resetForTest();
+        await restore();
+    }
 });
 
 test("loadRegistry clears its memo after a failed load so the next call retries", async () => {

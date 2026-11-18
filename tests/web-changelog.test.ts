@@ -33,12 +33,24 @@ function fetchStub(body: unknown, status = 200): typeof fetch {
 
 const origFetch = globalThis.fetch;
 
+const savedRefresh = process.env.BILI_PUBLIC_METADATA_REFRESH;
 beforeEach(() => {
+    process.env.BILI_PUBLIC_METADATA_REFRESH = "1";
     _resetChangelogForTest();
 });
 afterEach(() => {
+    if (savedRefresh === undefined) delete process.env.BILI_PUBLIC_METADATA_REFRESH;
+    else process.env.BILI_PUBLIC_METADATA_REFRESH = savedRefresh;
     _resetChangelogForTest();
     globalThis.fetch = origFetch;
+});
+
+test("disabled refresh keeps forced changelog reads local", async () => {
+    process.env.BILI_PUBLIC_METADATA_REFRESH = "0";
+    let hits = 0;
+    globalThis.fetch = () => { hits += 1; throw new Error("unexpected fetch"); };
+    assert.deepEqual(await getChangelog({ force: true }), { releases: [] });
+    assert.equal(hits, 0);
 });
 
 test("maps GitHub releases: passthrough fields, newest-first order, 20-entry cap", async () => {

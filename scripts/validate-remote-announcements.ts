@@ -4,7 +4,7 @@
 // Usage: node --import tsx scripts/validate-remote-announcements.ts [path]
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { parseRemoteDoc, DEFAULT_ANNOUNCEMENTS_URL } from "../src/remote-notices.js";
+import { parseRemoteDoc } from "../src/remote-notices.js";
 
 const target = process.argv[2] ? path.resolve(process.argv[2]) : path.join(import.meta.dirname, "..", "announcements", "remote.json");
 const failures: string[] = [];
@@ -13,7 +13,6 @@ try {
     docText = readFileSync(target, "utf8");
 } catch {
     console.error(`[validate-announcements] cannot read ${target}`);
-    console.error("[validate-announcements] the client fetches " + DEFAULT_ANNOUNCEMENTS_URL);
     console.error("[validate-announcements] — commit announcements/remote.json ({v:1, entries:[...]}) to master.");
     process.exit(1);
 }

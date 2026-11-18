@@ -4,16 +4,16 @@ domain: updates
 entries:
   - key: autoUpdate
     type: boolean
-    default: "true"
+    default: "false"
     env: ACP_AUTO_UPDATE
     group: updates
     id: tt.aupd
     site_group: diag
-    desc_en: "Automatic npm version checks (every ~3 min); disable via ACP_AUTO_UPDATE=0 or --no-auto-update."
-    desc_zh: "自动 npm 版本检查（约每 3 分钟）；ACP_AUTO_UPDATE=0 或 --no-auto-update 关闭。"
-    desc_ja: "自動 npm バージョンチェック（約 3 分ごと）；ACP_AUTO_UPDATE=0 または --no-auto-update で無効化。"
-    site_en: "<code>autoUpdate</code> — automatic version checks (on by default; disable via ACP_AUTO_UPDATE=0 or --no-auto-update)."
-    site_zh: "<code>autoUpdate</code> —— 自动版本检查（默认开；ACP_AUTO_UPDATE=0 或 --no-auto-update 关闭）。"
+    desc_en: "Automatic npm version checks (every ~3 min); enable via ACP_AUTO_UPDATE=1."
+    desc_zh: "自动 npm 版本检查（约每 3 分钟）；ACP_AUTO_UPDATE=1 开启。"
+    desc_ja: "自動 npm バージョンチェック（約 3 分ごと）；ACP_AUTO_UPDATE=1 で有効化。"
+    site_en: "<code>autoUpdate</code> — automatic version checks (off by default; enable via ACP_AUTO_UPDATE=1)."
+    site_zh: "<code>autoUpdate</code> —— 自动版本检查（默认关；ACP_AUTO_UPDATE=1 开启）。"
   - key: autoRestartOnUpdate
     type: boolean
     default: "false"
@@ -91,7 +91,7 @@ entries:
     desc_ja: "リモート自動更新ポリシーファイルの URL 上書き (テスト用シーム — 本番環境では公式リポジトリに固定される)。"
   - key: advisoryCheck
     type: boolean
-    default: "true"
+    default: "false"
     env: BILI_ADVISORY_CHECK
     group: updates
     id: tt.advisory
@@ -99,8 +99,8 @@ entries:
     desc_en: "Critical-defect advisory watcher; force-installs the recommended fix when the running version is affected."
     desc_zh: "关键缺陷公告监视器；本机版本命中受影响范围时装填推荐修复版本。"
     desc_ja: "重大な欠陥に関するアドバイザリーウォッチャー; 実行中のバージョンが影響を受ける場合、推奨される修正を強制インストールする。"
-    site_en: "<code>advisoryCheck</code> / <code>advisoryUrl</code> — critical-defect advisory watcher (on by default; force-installs the recommended fix when your version is affected)."
-    site_zh: "<code>advisoryCheck</code> / <code>advisoryUrl</code> —— 关键缺陷公告监视器（默认开；本机版本命中受影响范围时装填推荐修复版本）。"
+    site_en: "<code>advisoryCheck</code> / <code>advisoryUrl</code> — critical-defect advisory watcher (off by default; force-installs the recommended fix when your version is affected)."
+    site_zh: "<code>advisoryCheck</code> / <code>advisoryUrl</code> —— 关键缺陷公告监视器（默认关；本机版本命中受影响范围时装填推荐修复版本）。"
   - key: advisoryUrl
     type: string
     default: "unset (built-in feed)"
@@ -111,7 +111,7 @@ entries:
     desc_ja: "アドバイザリーフィードの URL 上書き。"
   - key: remoteAnnouncementsUrl
     type: string
-    default: "unset (official feed: GitHub master announcements/remote.json)"
+    default: "unset (disabled)"
     env: BILI_ANNOUNCEMENTS_URL
     group: updates
     desc_en: "Override URL for the remote announcement feed (#5548): JSON document {v: 1, entries: [...]} — same record schema as local announcement files, fetched every ~3 min like the other watchers, cached snapshot survives restarts/outages. Firewall installs point this at a relay mirror; bad pushes are rejected and the last good copy keeps showing. Local files in <config dir>/announcements/*.json always shadow same-id remote/builtin notices. An entry may carry an optional `requiresScan: { \"client\", \"knownId\"? }` field — a live conflict-scan gate: the banner stays hidden unless that client's read-only plugin-registry scan actually reports the plugin (any finding, or the matching `knownId`), so a machine-specific conflict broadcast shows exactly where the conflict exists (#5984)."
@@ -119,7 +119,7 @@ entries:
     desc_ja: "リモートアナウンスメントフィードの URL 上書き (#5548): JSON ドキュメント {v: 1, entries: [...]} — ローカルアナウンスメントファイルと同じレコードスキーマ。他のウォッチャーと同様に約 3 分ごとに取得され、キャッシュされたスナップショットは再起動や障害後も維持される。ファイアウォールインストールではこれをリレーミラーに向ける。不正なプッシュは拒否され、最後に正常だったコピーが表示され続ける。`<config dir>/announcements/*.json` 内のローカルファイルは、同じ ID のリモート/組み込み通知を常にシャドウする。エントリは任意の `requiresScan: { \"client\", \"knownId\"? }` フィールドを持てます — ライブ競合スキャンゲートで、そのクライアントの読み取り専用プラグインレジストリスキャンが実際に該当プラグインを報告した場合（いずれかの所見、または `knownId` 一致）以外ではバナーは非表示のままです。そのためマシン固有の競合のブロードキャストは、競合が存在するマシンで正確に表示されます (#5984)。"
   - key: releaseNotesCheck
     type: boolean
-    default: "true"
+    default: "false"
     env: BILI_RELEASE_NOTES_CHECK
     group: updates
     id: tt.rnotes
@@ -127,8 +127,8 @@ entries:
     desc_en: "Release-notes feed for the web panel (fetch + cache only; never installs anything)."
     desc_zh: "Web 面板里的发布说明源（只抓取缓存、从不安装任何东西）。"
     desc_ja: "Web パネル用のリリースノートフィード (取得とキャッシュのみ; 何もインストールしない)。"
-    site_en: "<code>releaseNotesCheck</code> / <code>releaseNotesUrl</code> — release-notes feed for the panel (on by default; fetch + cache only, never installs)."
-    site_zh: "<code>releaseNotesCheck</code> / <code>releaseNotesUrl</code> —— 面板里的发布说明源（默认开；只抓取缓存、从不安装）。"
+    site_en: "<code>releaseNotesCheck</code> / <code>releaseNotesUrl</code> — release-notes feed for the panel (off by default; fetch + cache only, never installs)."
+    site_zh: "<code>releaseNotesCheck</code> / <code>releaseNotesUrl</code> —— 面板里的发布说明源（默认关；只抓取缓存、从不安装）。"
   - key: releaseNotesUrl
     type: string
     default: "unset (built-in feed)"

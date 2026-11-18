@@ -12,9 +12,7 @@
 //      opted out (BILI_ENCRYPTION_KEY) AND the sidecar carries no data;
 //      explicit legacy or a healthy sidecar → false (banner stays hidden).
 //   3. the generic diagnostics endpoint (/__bili/diagnostics?topic=…) serves
-//      a copyable blob + a prefilled GitHub issues/new URL whose body decodes
-//      back to the exact blob — the reusable "copy error → file issue"
-//      facility ("以后错误都这样"); unknown topics fall back to the base blob.
+//      a copyable report and a plain issue URL. Unknown topics fall back to the base report.
 //   4. the page ships the banner element and the client references it plus
 //      the localized copy keys and the diagnostics endpoint.
 import test from "node:test";
@@ -99,7 +97,7 @@ async function fetchJson<T>(port: number, p: string): Promise<T> {
 // scenario now runs in a spawned child that needs the exact same server
 // opts, so there is one copy, imported by both sides.
 
-test("#3040 failed-open surface: status+overview report degraded; diagnostics blob + prefilled issue link", async () => {
+test("#3040 failed-open surface: status+overview report degraded; diagnostics blob + blank issue link", async () => {
     const snap = saveEnv();
     const base = mkdtempSync(path.join(tmpdir(), "bili-storage-banner-"));
     // Hoisted so the finally can release the sidecar's SQLite handle via
@@ -149,14 +147,11 @@ test("#3040 failed-open surface: status+overview report degraded; diagnostics bl
             assert.ok(d.blob.includes("sessions on disk:"), "blob carries the session count");
             assert.ok(d.title.startsWith("SQLite unified storage degraded to legacy-only"), "title names the condition");
             assert.ok(d.title.includes(`${process.platform}-${process.arch}`), "title carries the environment");
-            assert.ok(d.url.startsWith("https://github.com/ranxianglei/billion-context/issues/new?title="), "url targets issues/new");
-            const u = new URL(d.url);
-            assert.equal(u.searchParams.get("body"), d.blob, "issue body decodes back to the exact blob");
-            assert.ok((u.searchParams.get("title") ?? "").includes(VERSION), "issue title encodes the same environment facts");
+            assert.equal(d.url, "https://github.com/ranxianglei/billion-context/issues/new", "the external issue URL carries no diagnostics");
 
             const d2 = await fetchJson<DiagnosticsWire>(port, "/__bili/diagnostics?topic=some-future-topic");
             assert.ok(d2.blob.includes("some-future-topic (no topic-specific section registered)"), "unknown topics degrade to the base blob");
-            assert.equal(new URL(d2.url).searchParams.get("body"), d2.blob, "generic facility encodes any topic's blob");
+            assert.equal(d2.url, d.url, "unknown topics also use a blank issue URL");
 
             const html = renderPage(`http://127.0.0.1:${port}`, VERSION);
             assert.ok(html.includes('id="storage-degraded-banner"'), "page carries the banner div");
@@ -287,10 +282,8 @@ test("#3040 no-engine ask -> boot REFUSES (no degradation in any case, 2026-10-3
 });
 
 // #3235: the compression-conflict banner rides the same generic #3040 facility
-// ("以后错误都这样") — the conflict-banner topic must serve the ledger summary
-// in the copyable blob with a prefilled GitHub issues/new URL, so a user hit by
-// the banner can report the exact evidence in two clicks without pasting logs.
-test("#3235 conflict-banner diagnostics topic serves the ledger summary + prefilled issue URL", async () => {
+// The ledger summary stays in the copyable report.
+test("#3235 conflict-banner diagnostics topic serves the ledger summary + blank issue URL", async () => {
     const base = mkdtempSync(path.join(tmpdir(), "web-conflict-topic-"));
     const snap = saveEnv();
     let proxy: http.Server | undefined;
@@ -305,10 +298,7 @@ test("#3235 conflict-banner diagnostics topic serves the ledger summary + prefil
         assert.ok(d.title.startsWith("Compression conflict banner"), "title names the topic");
         assert.ok(d.blob.includes("--- compression conflict ledger ---"), "blob carries the ledger section");
         assert.ok(d.blob.includes("banner policy (#3235)"), "blob documents the alarm rule for reporters");
-        assert.ok(d.url.startsWith("https://github.com/ranxianglei/billion-context/issues/new?title="), "url targets issues/new");
-        const u = new URL(d.url);
-        assert.equal(u.searchParams.get("body"), d.blob, "issue body decodes back to the exact blob");
-        assert.ok((u.searchParams.get("title") ?? "").includes(VERSION), "issue title encodes the version");
+        assert.equal(d.url, "https://github.com/ranxianglei/billion-context/issues/new", "the external issue URL carries no diagnostics");
     } finally {
         if (proxy) await close(proxy);
         restoreEnv(snap);

@@ -1,25 +1,31 @@
 # billion-context proxy in a container (#3389).
 #
-# Installs the published npm package at build time (the tested artifact — no
-# source is compiled in the image) and runs the proxy as a long-lived service.
+# Builds the checked-out source and copies the runtime package into the image.
 #
 #   docker build -t billion-context .
-#   docker run -d --name bili -p 8787:8787 \
+#   docker run -d --name bili -p 127.0.0.1:8787:8787 \
 #     -v bili-config:/root/.config/billion-context \
 #     -v bili-data:/root/.local/share/billion-context \
 #     -v bili-cache:/root/.cache/billion-context \
 #     -v bili-state:/root/.local/state/billion-context \
 #     billion-context
 #
-# Updates: rebuild/pull a newer image. In-container self-update is OFF by
-# default (ACP_AUTO_UPDATE=0) so the running copy can never silently drift
-# from its image version; opt back in with `-e ACP_AUTO_UPDATE=1`. Pin a
-# release with `--build-arg BILI_VERSION=<version>` (default: latest).
+# Rebuild from the desired fork commit to update the container.
+FROM node:24-slim AS build
+WORKDIR /build
+COPY . .
+RUN npm ci --ignore-scripts --no-audit --no-fund && npm run build
+RUN npm pack --ignore-scripts --pack-destination /tmp \
+    && mkdir /opt/bili \
+    && tar -xzf /tmp/billion-context-*.tgz --strip-components=1 -C /opt/bili \
+    && npm prune --omit=dev --ignore-scripts --no-audit --no-fund \
+    && mv node_modules /opt/bili/
 
 FROM node:24-slim
-
-ARG BILI_VERSION=latest
-RUN npm install -g --no-audit --no-fund "billion-context@${BILI_VERSION}"
+COPY --from=build /opt/bili /opt/bili
+RUN chmod +x /opt/bili/dist/index.js \
+    && ln -s /opt/bili/dist/index.js /usr/local/bin/bili \
+    && ln -s /opt/bili/dist/index.js /usr/local/bin/bili-proxy
 
 ENV ACP_AUTO_UPDATE=0
 

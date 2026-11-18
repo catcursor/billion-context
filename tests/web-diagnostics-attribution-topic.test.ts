@@ -78,10 +78,7 @@ test("#7053 attribution topic is registered — specific title + section, not th
     assert.ok(blob.includes("endpoint: https://<private-host>/v1/chat/completions"), "masked endpoint rendered");
     assert.ok(!blob.includes("relay.example.com"), "endpoint host must be host-masked by the publish boundary");
     assert.ok(blob.includes("banner policy (#3581/#3651)"), "banner-policy note present");
-    // URL round-trip: the prefilled body decodes back to the exact blob.
-    const u = new URL(rep.url);
-    assert.equal(u.origin + u.pathname, "https://github.com/ranxianglei/billion-context/issues/new");
-    assert.equal(decodeURIComponent(u.searchParams.get("body") ?? ""), blob);
+    assert.equal(rep.url, "https://github.com/ranxianglei/billion-context/issues/new", "the external issue URL carries no diagnostics");
 });
 
 test("#7053 attribution error text passes the publish boundary — credential shapes scrubbed", async (t) => {

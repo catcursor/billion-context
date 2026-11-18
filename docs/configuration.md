@@ -68,6 +68,7 @@ This index is generated from `website/config-reference/*.yaml` — edit the seed
 
 | Key | Type | Default | Env | Description |
 |-----|------|---------|-----|-------------|
+| `publicMetadataRefresh` | boolean | false | BILI_PUBLIC_METADATA_REFRESH | Set to true to refresh the model catalog from models.dev and the blog and changelog from GitHub. These services can observe the source IP and request time. Set the environment variable to 1 to enable. |
 | `port` | number | 8787 | ACP_PORT, PORT | TCP port the proxy listens on (user zone; lane-spawned proxies use BILI_ZONE_PORT instead). |
 | `host` | string | 127.0.0.1 | ACP_HOST | Bind address. 127.0.0.1 = loopback only; :: = dual-stack; 0.0.0.0 exposes outward (no auth — trusted networks only). |
 | `sessionHeader` | string | x-acp-session | ACP_SESSION_HEADER | HTTP header carrying the conversation id; same value shares compression state. |
@@ -233,7 +234,7 @@ This index is generated from `website/config-reference/*.yaml` — edit the seed
 
 | Key | Type | Default | Env | Description |
 |-----|------|---------|-----|-------------|
-| `autoUpdate` | boolean | true | ACP_AUTO_UPDATE | Automatic npm version checks (every ~3 min); disable via ACP_AUTO_UPDATE=0 or --no-auto-update. |
+| `autoUpdate` | boolean | false | ACP_AUTO_UPDATE | Automatic npm version checks (every ~3 min); enable via ACP_AUTO_UPDATE=1. |
 | `autoRestartOnUpdate` | boolean | false | ACP_AUTO_RESTART_ON_UPDATE | Restart the daemon automatically once a newer version has been installed. |
 | `updateTag` | string | latest | ACP_UPDATE_TAG | npm dist-tag channel for self-updates: latest (default), dev, or pr. |
 | `update` | object | {} (all defaults) | — | Self-update channel settings. |
@@ -242,10 +243,10 @@ This index is generated from `website/config-reference/*.yaml` — edit the seed
 | `update.staggerMinDelayMs` | number \| string | 900000 (built-in 15 min) | BILI_UPDATE_STAGGER_MIN_MS | #3619 staggered rollout: lower bound of this machine's base upgrade-delay window; ms number or duration string (15m / 2d / 1d12h); 0 disables the delay (legacy immediate). The remote policy's default window and per-version overrides stack on top. |
 | `update.staggerMaxDelayMs` | number \| string | 172800000 (built-in 48 h) | BILI_UPDATE_STAGGER_MAX_MS | #3619 staggered rollout: upper bound of this machine's base upgrade-delay window; ms number or duration string (48h / 2d); together with min 0 restores legacy immediate upgrades. |
 | `update.policyUrl` | string | official repo raw URL | BILI_UPDATE_POLICY_URL | Override URL for the remote auto-update policy file (test seam — production stays pinned to the official repo). |
-| `advisoryCheck` | boolean | true | BILI_ADVISORY_CHECK | Critical-defect advisory watcher; force-installs the recommended fix when the running version is affected. |
+| `advisoryCheck` | boolean | false | BILI_ADVISORY_CHECK | Critical-defect advisory watcher; force-installs the recommended fix when the running version is affected. |
 | `advisoryUrl` | string | unset (built-in feed) | BILI_ADVISORY_URL | Override URL for the advisory feed. |
-| `remoteAnnouncementsUrl` | string | unset (official feed: GitHub master announcements/remote.json) | BILI_ANNOUNCEMENTS_URL | Override URL for the remote announcement feed (#5548): JSON document {v: 1, entries: [...]} — same record schema as local announcement files, fetched every ~3 min like the other watchers, cached snapshot survives restarts/outages. Firewall installs point this at a relay mirror; bad pushes are rejected and the last good copy keeps showing. Local files in <config dir>/announcements/*.json always shadow same-id remote/builtin notices. An entry may carry an optional `requiresScan: { "client", "knownId"? }` field — a live conflict-scan gate: the banner stays hidden unless that client's read-only plugin-registry scan actually reports the plugin (any finding, or the matching `knownId`), so a machine-specific conflict broadcast shows exactly where the conflict exists (#5984). |
-| `releaseNotesCheck` | boolean | true | BILI_RELEASE_NOTES_CHECK | Release-notes feed for the web panel (fetch + cache only; never installs anything). |
+| `remoteAnnouncementsUrl` | string | unset (disabled) | BILI_ANNOUNCEMENTS_URL | Override URL for the remote announcement feed (#5548): JSON document {v: 1, entries: [...]} — same record schema as local announcement files, fetched every ~3 min like the other watchers, cached snapshot survives restarts/outages. Firewall installs point this at a relay mirror; bad pushes are rejected and the last good copy keeps showing. Local files in <config dir>/announcements/*.json always shadow same-id remote/builtin notices. An entry may carry an optional `requiresScan: { "client", "knownId"? }` field — a live conflict-scan gate: the banner stays hidden unless that client's read-only plugin-registry scan actually reports the plugin (any finding, or the matching `knownId`), so a machine-specific conflict broadcast shows exactly where the conflict exists (#5984). |
+| `releaseNotesCheck` | boolean | false | BILI_RELEASE_NOTES_CHECK | Release-notes feed for the web panel (fetch + cache only; never installs anything). |
 | `releaseNotesUrl` | string | unset (built-in feed) | BILI_RELEASE_NOTES_URL | Override URL for the release-notes feed. |
 
 **Diagnostics & tuning**
@@ -752,9 +753,9 @@ Top-level keys that control how the proxy listens and behaves globally.
 ### `autoUpdate`
 
 - **Type:** `boolean`
-- **Default:** `true`
+- **Default:** `false`
 - **Status:** ACTIVE
-- **Description:** Periodic npm-registry version check (every `update.checkIntervalMs`, default 3 min; the first check per process ignores throttle). Detects newer builds on the configured `updateTag` channel; whether the running process actually swaps depends on `autoRestartOnUpdate` (self-restart) or the advisory lane (forced install). Disabled by `ACP_AUTO_UPDATE=0`. Independent of `advisoryCheck`: installs with auto-update off still escape known-broken version ranges via the advisory watcher. Since #3619 a discovered upgrade is not applied immediately — automatic upgrades are staggered inside a random delay window (built-in 15 min – 48 h, remote policy adjustable; see [`update`](#update) below), so a bad release can be caught mid-rollout instead of after the whole fleet has moved.
+- **Description:** Enable periodic npm registry updates. Installing upstream code can replace the fork. `ACP_AUTO_UPDATE=1`.
 
 ### `autoRestartOnUpdate`
 
@@ -773,9 +774,9 @@ Top-level keys that control how the proxy listens and behaves globally.
 ### `advisoryCheck`
 
 - **Type:** `boolean`
-- **Default:** `true`
+- **Default:** `false`
 - **Status:** ACTIVE
-- **Description:** Critical-defect advisory watcher (#1481): polls the companion package `billion-context-advisories` (CI-published from `advisories/`) and force-installs the pinned `target` version — which may be a ROLLBACK — when the running version falls inside a declared broken range. Runs independently of `autoUpdate`, so installs with auto-update off still get force-updated out of known-broken versions. Fail-open: an unreachable or malformed source only warns and never blocks model traffic. Disabled by `BILI_ADVISORY_CHECK=0`.
+- **Description:** Enable the independent advisory watcher. An advisory can install an upstream version. `BILI_ADVISORY_CHECK=1`.
 
 ### `advisoryUrl`
 
@@ -787,9 +788,9 @@ Top-level keys that control how the proxy listens and behaves globally.
 ### `releaseNotesCheck`
 
 - **Type:** `boolean`
-- **Default:** `true`
+- **Default:** `false`
 - **Status:** ACTIVE
-- **Description:** Release-notes visibility watcher (#1870): fetches the companion `billion-context-release-notes` document and surfaces "CRITICAL update ready — restart to finish" or "critical update available" on `acp_status` and the `/acp` panel ONLY when the pending span contains a `critical`-tier entry — routine releases never surface (silent by design, #1977). Never installs, never restarts; fail-open. Disabled by `BILI_RELEASE_NOTES_CHECK=0`.
+- **Description:** Enable periodic release-note downloads. `BILI_RELEASE_NOTES_CHECK=1`.
 
 ### `releaseNotesUrl`
 
@@ -1921,7 +1922,7 @@ File keys resolve only when the matching env var is unset. Defaults in parenthes
 |---------|------------|--------|
 | `` | `pi.commands` | ["acp", "acp-cache"] |
 | `ACP_AUTO_RESTART_ON_UPDATE` | `autoRestartOnUpdate` | false |
-| `ACP_AUTO_UPDATE` | `autoUpdate` | true |
+| `ACP_AUTO_UPDATE` | `autoUpdate` | false |
 | `ACP_COMPRESS_NUDGE` | `compress.injectNudge` | true |
 | `ACP_COMPRESS_PROTOCOL` | `diagnostics.compressProtocol` | "tools" |
 | `ACP_COMPRESS_TOOL` | `compress.injectTool` | true |
@@ -1946,12 +1947,12 @@ File keys resolve only when the matching env var is unset. Defaults in parenthes
 | `ACP_SESSION_HEADER` | `sessionHeader` | x-acp-session |
 | `ACP_UPDATE_TAG` | `updateTag` | latest |
 | `ACP_UPSTREAM` | `upstream` | https://api.anthropic.com |
-| `BILI_ADVISORY_CHECK` | `advisoryCheck` | true |
+| `BILI_ADVISORY_CHECK` | `advisoryCheck` | false |
 | `BILI_ADVISORY_URL` | `advisoryUrl` | unset (built-in feed) |
 | `BILI_AFFINITY_SIMHASH` | `affinitySimhash` | true |
 | `BILI_ALLOW_DSH_COMPACTION` | `dsh` | {} |
 | `BILI_ALLOW_PRIVATE_HTTP_PROVIDERS` | `network.allowPrivateHttpProviders` | false |
-| `BILI_ANNOUNCEMENTS_URL` | `remoteAnnouncementsUrl` | unset (official feed: GitHub master announcements/remote.json) |
+| `BILI_ANNOUNCEMENTS_URL` | `remoteAnnouncementsUrl` | unset (disabled) |
 | `BILI_AUTO_MODE_FORGE` | `autoModeForge.enabled` | true |
 | `BILI_CACHE_KEEPALIVE` | `cacheKeepalive.enabled` | false |
 | `BILI_CACHE_KEEPALIVE_ARM_WITHOUT_BREAKPOINTS` | `cacheKeepalive.armWithoutBreakpoints` | false |
@@ -2023,9 +2024,10 @@ File keys resolve only when the matching env var is unset. Defaults in parenthes
 | `BILI_PREFLIGHT_DEAD_END_COOLDOWN_MS` | `network.preflightDeadEndCooldownMs` | 300000 |
 | `BILI_PREFLIGHT_HOLD_MS` | `network.preflightHoldMs` | 30000 |
 | `BILI_PROXY_KEEPALIVE_MAX_MS` | `network.proxyKeepAliveMaxMs` | 55000 (0 = one-shot connections) |
+| `BILI_PUBLIC_METADATA_REFRESH` | `publicMetadataRefresh` | false |
 | `BILI_PUBLIC_SNAPSHOT_CAP_BYTES` | `plugin.snapshotCapBytes` | 104857600 (0 disables snapshots) |
 | `BILI_RECEIVE_BODY_BYTES` | `network.receiveBodyBytes` | 5368709120 |
-| `BILI_RELEASE_NOTES_CHECK` | `releaseNotesCheck` | true |
+| `BILI_RELEASE_NOTES_CHECK` | `releaseNotesCheck` | false |
 | `BILI_RELEASE_NOTES_URL` | `releaseNotesUrl` | unset (built-in feed) |
 | `BILI_REPLAY_RETRY_BASE_MS` | `network.replayRetryBaseMs` | 1500 (0 disables the delay) |
 | `BILI_REPLAY_RETRY_MAX` | `network.replayRetryMax` | 3 (1 disables replays) |
@@ -2107,7 +2109,7 @@ File keys resolve only when the matching env var is unset. Defaults in parenthes
 | `ACP_HOST` | Override the listen host. |
 | `ACP_UPSTREAM` | Override the default upstream base URL. |
 | `ACP_LOG` | Set to `0` to disable request logging. |
-| `ACP_AUTO_UPDATE` | Set to `0` to disable auto-update checks. File-config key: `autoUpdate`. |
+| `ACP_AUTO_UPDATE` | `1` — Enable periodic npm registry updates. Installing upstream code can replace the fork. |
 | `ACP_AUTO_RESTART_ON_UPDATE` | Set to `1` (any non-`0` value) to enable self-restart after an auto-update install (#811): the restart requires zero in-flight requests, passes an install sanity check, honors a 10-minute cooldown marker, and resumes the original listener on failure. File-config key: `autoRestartOnUpdate`. |
 | `ACP_UPDATE_TAG` | Dist-tag channel the auto-updater follows (default `latest`, e.g. `dev`). File-config key: `updateTag`. The rolling `pr` tag tracks the newest PR test build across all PRs; legacy per-PR `pr-N` tags are frozen at that PR's last build and are only followed when explicitly configured. The rolling `master` tag tracks the newest build merged to master — every non-release merge publishes one (#2049); set it to follow merged-but-unreleased state. |
 | `BILI_UPDATE_REGISTRY` | Base URL override for the npm registry used by the auto-updater and `bili update` (default `https://registry.npmjs.org`). Intended for hermetic testing against a loopback registry (the verdaccio instance in the `ACP_TEST_REGISTRY` e2e suite); leave unset in production (#1153). |
@@ -2119,9 +2121,9 @@ File keys resolve only when the matching env var is unset. Defaults in parenthes
 | `BILI_DSH_RETRY_INTERVAL_MS` | Back-off (ms) between dsh native plugin tool-registration retries (#2082): after a manifest fetch or tool registration fails transiently, the next retry happens no sooner than this cooldown. Default `10000`; non-numeric or non-positive values fall back to `10000`. Test hook — shortened by the dsh-native unit tests so they never wait wall-clock; leave unset in production. |
 | `BILI_DSH_RECOVERY_INTERVAL_MS` | Interval (ms) of the dsh native plugin's detached recovery timer (#2082): while the tools are down it keeps driving registration retries with zero model traffic — the case where the model already gave up on the missing tools and nothing else re-arms the loop. Defaults to following `BILI_DSH_RETRY_INTERVAL_MS` (`10000`). Test hook — under NODE_TEST_CONTEXT the timer never starts unless this var is set explicitly; leave unset in production. |
 | `BILI_DSH_MAX_TESTED_VERSION` | Cap for the newer-than-tested dsh boot note (dsh native lane): the running dsh build — resolved from the nearest `node_modules/@deepseek-ai/dsh/package.json` above the injected bundle — is compared (semver, pre-release aware) against this newest-tested version, and being STRICTLY NEWER earns ONE durable boot-time note (inside the dsh session) advising roll-back to the capped version until support lands. One direction only: at-or-below-cap builds stay silent, because known older-build break modes already have their own overlay-latch detectors (#3806 boot warning + #2474 fallback). Soft by design: it warns, never gates or blocks traffic (a wrong guess must not take down a working session). Default = `0.2.0-rc.2`, the CI e2e anchor (.github/workflows/ci-e2e-dsh-native.yml); move the cap up as builds get verified; an EMPTY string turns the check off for this lane. Unresolvable/unparseable versions fail open to silence (absence of evidence ≠ broken build).
-| `BILI_ADVISORY_CHECK` | Set to `0` to disable the critical-defect advisory watcher (#1481). Default ON — it runs independently of `ACP_AUTO_UPDATE` so that installs with auto-update off still get force-updated out of a known-broken version range. Fail-open: an unreachable/malformed source only warns, never blocks model traffic. File-config key: `advisoryCheck`. |
+| `BILI_ADVISORY_CHECK` | `1` — Enable the independent advisory watcher. An advisory can install an upstream version. |
 | `BILI_ADVISORY_URL` | Override for the advisory document URL. Default: the companion package `billion-context-advisories` on the configured registry (`BILI_UPDATE_REGISTRY` aware). File-config key: `advisoryUrl`. |
-| `BILI_RELEASE_NOTES_CHECK` | Set to `0` to disable the release-notes visibility watcher (#1870). Default ON — pure visibility, silent by default (#1977): fetches the companion release-notes doc and surfaces "CRITICAL update ready — restart to finish" (disk newer than running) or "critical update available" on `acp_status` and the `/acp` panel ONLY when the pending span contains a `critical`-tier entry; routine/recommended releases never surface. Never installs, never restarts; fail-open. File-config key: `releaseNotesCheck`. |
+| `BILI_RELEASE_NOTES_CHECK` | `1` — Enable periodic release-note downloads. |
 | `BILI_RELEASE_NOTES_URL` | Override for the release-notes document URL. Default: the companion package `billion-context-release-notes` on the configured registry (`BILI_UPDATE_REGISTRY` aware). File-config key: `releaseNotesUrl`. |
 | ~~`BILI_HOST_USAGE_CREDIT`~~ / ~~`hostUsageCredit`~~ | **Removed in #660.** Used to select the host-facing usage mode. The #408 uncompressed-baseline backfill is gone entirely — every host now reports the actually-forwarded (post-fold) request as provider-measured (matches `[acp-usage] input=`). Old values left in env or the config file are ignored; remove them. See the "Bug history lesson" section of PR #691. |
 | `ACP_PROVIDERS` | Path to an external `providers.json` (legacy / shared file). |

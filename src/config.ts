@@ -1037,10 +1037,10 @@ export type ProxyOptions = {
     updateTag?: string;
     /** Critical-defect advisory watcher (#1481): runs INDEPENDENTLY of
      *  autoUpdate and force-installs the owner-recommended version when the
-     *  local version falls inside an affected range. Default ON. */
+     *  local version falls inside an affected range. Opt-in. */
     advisoryCheck?: boolean;
     /** Tiered release-notes visibility (#1870): fetch + cache only — never
-     *  installs, never restarts. Default ON. */
+     *  installs, never restarts. Opt-in. */
     releaseNotesCheck?: boolean;
     /** Override for the advisory document URL (env BILI_ADVISORY_URL wins). */
     advisoryUrl?: string;
@@ -1049,7 +1049,7 @@ export type ProxyOptions = {
     releaseNotesUrl?: string;
     /** Override for the remote announcements feed URL (#5548 P3; env
      *  BILI_ANNOUNCEMENTS_URL wins). Firewall installs point this at a relay;
-     *  absent = official raw.githubusercontent feed. */
+     *  absent = remote announcements disabled. */
     remoteAnnouncementsUrl?: string;
     logFile?: string;
     /** MITM transparent-proxy mode. When enabled, an HTTP CONNECT handler is
@@ -1801,17 +1801,13 @@ export function loadOptions(env: NodeJS.ProcessEnv = process.env): ProxyOptions 
         dumpSse: env.ACP_DUMP_SSE || fileConfig.dumpSse || undefined,
         passthrough: passthrough.enabled,
         passthroughSource: passthrough.source,
-        autoUpdate: (env.ACP_AUTO_UPDATE ?? (fileConfig.autoUpdate === false ? "0" : "1")) !== "0",
-        // Default OFF: unlike autoUpdate, self-restart touches process
-        // liveness, so it requires an explicit opt-in (#811).
+        autoUpdate: env.ACP_AUTO_UPDATE === undefined ? fileConfig.autoUpdate === true : env.ACP_AUTO_UPDATE === "1",
+        // Restarting after installation also requires an explicit opt-in.
         autoRestartOnUpdate: (env.ACP_AUTO_RESTART_ON_UPDATE ?? (fileConfig.autoRestartOnUpdate === true ? "1" : "0")) !== "0",
         updateTag: (env.ACP_UPDATE_TAG ?? fileConfig.updateTag ?? "latest").trim() || "latest",
-        // Default ON: unlike autoRestartOnUpdate, this never touches process
-        // liveness — it only installs files and warns (#1481).
-        advisoryCheck: (env.BILI_ADVISORY_CHECK ?? (fileConfig.advisoryCheck === false ? "0" : "1")) !== "0",
-        // Default ON: same reasoning as advisoryCheck — pure visibility (fetch
-        // + cache; never installs, never restarts) (#1870).
-        releaseNotesCheck: (env.BILI_RELEASE_NOTES_CHECK ?? (fileConfig.releaseNotesCheck === false ? "0" : "1")) !== "0",
+        // This independent watcher can install registry code even if autoUpdate is off.
+        advisoryCheck: env.BILI_ADVISORY_CHECK === undefined ? fileConfig.advisoryCheck === true : env.BILI_ADVISORY_CHECK === "1",
+        releaseNotesCheck: env.BILI_RELEASE_NOTES_CHECK === undefined ? fileConfig.releaseNotesCheck === true : env.BILI_RELEASE_NOTES_CHECK === "1",
         advisoryUrl: env.BILI_ADVISORY_URL || fileConfig.advisoryUrl || undefined,
         releaseNotesUrl: env.BILI_RELEASE_NOTES_URL || fileConfig.releaseNotesUrl || undefined,
         remoteAnnouncementsUrl: env.BILI_ANNOUNCEMENTS_URL || fileConfig.remoteAnnouncementsUrl || undefined,
@@ -1996,6 +1992,8 @@ export interface RolloutFileConfig {
 /** Shape of the optional JSON config file. All fields optional — the file is a
  *  pure override layer; anything unset falls through to defaults. */
 type FileConfig = {
+    /** Opt in to public model catalog, changelog, and blog refreshes. */
+    publicMetadataRefresh?: boolean;
     port?: number;
     host?: string;
     upstream?: string;
@@ -2020,10 +2018,10 @@ type FileConfig = {
     autoRestartOnUpdate?: boolean;
     /** Dist-tag channel the auto-updater follows (default "latest"). */
     updateTag?: string;
-    /** Set `false` to disable the critical-defect advisory watcher (#1481);
+    /** Set `true` to enable the critical-defect advisory watcher (#1481);
      *  env BILI_ADVISORY_CHECK wins when set. */
     advisoryCheck?: boolean;
-    /** Set `false` to disable the tiered release-notes visibility watcher
+    /** Set `true` to enable the tiered release-notes visibility watcher
      *  (#1870); env BILI_RELEASE_NOTES_CHECK wins when set. */
     releaseNotesCheck?: boolean;
     /** Override for the advisory document URL (env BILI_ADVISORY_URL wins). */
@@ -2528,6 +2526,7 @@ function dedupeDomains(list: string[]): string[] {
 // config rule (§7.3). KNOWN_TOP_LEVEL_KEYS is the runtime mirror of FileConfig
 // above; keep it in sync when adding fields there.
 const KNOWN_TOP_LEVEL_KEYS = new Set([
+    "publicMetadataRefresh",
     "port", "host", "upstream", "providersPath", "providers", "proxy",
     "modelContextLimit", "sessionHeader", "log", "debug", "dumpSse",
     "passthrough", "autoUpdate", "autoRestartOnUpdate", "updateTag",

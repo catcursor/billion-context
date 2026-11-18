@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-<code>npm install -g billion-context --prefix=~/.local</code>
+<a href="#build-the-privacy-fork">Build the privacy fork</a>
 </p>
 
 <p align="center">
@@ -124,28 +124,19 @@ Pick by your client:
 **Native mode vs standalone extensions.** The host-native plugins (`bili plugin install …`) and the standalone in-process extensions (`billion-context-pi`, `opencode-acp`) are **mutually exclusive** — both active means double compression. The installer makes the switch: it replaces the legacy entries (bare name, `npm:` alias, versioned, path form; array or object shape) and snapshots the original config to `.bili-bak` once; a **project-local** install is not touched — remove that one by hand. As a runtime safety net for manual installs, the native entries set `BILLION_CONTEXT_NATIVE=<host>` synchronously at load so a standalone extension can stand down at action time. On the pi side the marker needs `billion-context-pi` **0.1.72+**, and the pi-native entry scans both pi settings files once its proxy is up and warns loudly when it spots a co-resident legacy entry the installer never saw — that warning is the only visible signal while an old `billion-context-pi` silently double-compresses.
 
 
-## Install
+## Build the privacy fork
 
-Linux / macOS — install with a user-level prefix (no `sudo`, no npm config
-changes, and `bili`'s self-update never hits permission errors):
+Use Node.js 24. The npm package and host-managed plugin installers can load upstream releases. Update this checkout from the fork and rebuild to retain these changes.
 
 ```bash
-npm install -g billion-context --prefix=~/.local
+git clone https://github.com/catcursor/billion-context.git
+cd billion-context
+npm ci --ignore-scripts
+npm run build
+node dist/index.js --help
 ```
 
-The `bili` command lands in `~/.local/bin` — already on PATH in most distros;
-if not, add `export PATH="$HOME/.local/bin:$PATH"` to `~/.bashrc` or
-`~/.zshrc`. On nvm or Homebrew Node the default prefix is already user-owned —
-a plain `npm install -g billion-context` works as-is. On Windows the default
-prefix (`%APPDATA%\npm`) is also user-writable — plain `npm install -g billion-context`.
-
-This installs the `bili` command (`bili-proxy` is kept as an alias). Hitting
-`EACCES` with an old root-owned prefix? Reinstall with `--prefix=~/.local`
-(pass the flag again on any future npm reinstall of `bili`) — that is the
-permanent fix; avoid `sudo`.
-
-Prefer containers? A `Dockerfile` ships at the repository root — see
-[Running in Docker](#running-in-docker) below.
+Start the proxy with `node dist/index.js start`. The configured model provider receives the conversation. Local sessions and logs can contain sensitive material. The fork requires explicit opt-in for registry updates, advisories, release notes and public metadata refreshes. Set a feed URL to enable remote announcements.
 
 ## Quickstart
 
@@ -331,21 +322,6 @@ should see a `processTurn` line per request, and once the conversation grows,
 
 Everything that doesn't fit in one Quickstart line — how each client's lanes attach, what gets written where, and known limitations — lives in **[docs/clients.md](docs/clients.md)**: dsh · Kimi Code · Hermes · ZCode · Gemini family (Gemini CLI / iFlow CLI / Qwen Code / Antigravity) · cert-MITM clients that never compress (CONNECT blind tunnels, #897) · unrecognized endpoints going direct (#1290) · OpenCode (launcher / native / pure proxy, `/acp` status & rules, legacy opencode-acp sessions #920).
 
-## From source (development)
-
-> **Risk:** `master` is the development branch and can be broken at any moment — unreleased changes, failing builds, unverified fixes. Unless you are patching the code or testing an unreleased fix, install a release with npm as above.
-
-```bash
-git clone https://github.com/ranxianglei/billion-context.git
-cd billion-context
-npm ci
-npm run build
-npm link
-bili --version
-```
-
-After `npm link`, `bili` works from any directory.
-
 ## FAQ
 
 **How do I check my cache hit rate?** Don't dig through logs — `/acp-cache`
@@ -470,13 +446,11 @@ state: `~/.local/share/billion-context/` (XDG-overridable; Windows AV exclusion
 
 ### Running in Docker
 
-A `Dockerfile` ships at the repository root — it installs the published npm
-package at build time (the tested artifact; nothing is compiled in the image)
-and runs the proxy as a service:
+Build the proxy from this checkout to include the fork’s privacy fixes.
 
 ```bash
 docker build -t billion-context .
-docker run -d --name bili -p 8787:8787 \
+docker run -d --name bili -p 127.0.0.1:8787:8787 \
   -v bili-config:/root/.config/billion-context \
   -v bili-data:/root/.local/share/billion-context \
   -v bili-cache:/root/.cache/billion-context \
@@ -484,13 +458,13 @@ docker run -d --name bili -p 8787:8787 \
   billion-context
 ```
 
-Then point clients' baseURL at `http://<host>:8787/bili/…` exactly like Option 3
+Then point clients' baseURL at `http://127.0.0.1:8787/bili/…` exactly like Option 3
 above.
 
 - **Base:** `node:24-slim` — uses the builtin `node:sqlite` storage engine directly (no native-addon download). Don't switch to Node 20 bases: the self-downloaded SQLite engine requires Node ≥ 22 and crashes under 20 (#3341).
-- **Updates:** in-container self-update is **off by default** (`ACP_AUTO_UPDATE=0`) — the sanctioned update channel for a containerized copy is rebuilding/pulling a newer image; an in-place self-update would be silently reverted to the image version on the next recreate. Opt back in with `-e ACP_AUTO_UPDATE=1`; pin a release at build time with `--build-arg BILI_VERSION=0.1.197` (default `latest`).
+- **Updates:** Rebuild the image from the desired fork commit. The image sets `ACP_AUTO_UPDATE=0`.
 - **Data:** the four mounted dirs hold config, session state, update throttle/lock + cached SQLite engine, and logs respectively. Mount volumes or bind mounts so they survive container replacement; the image also declares them as `VOLUME`s so even a bare `docker run` keeps them out of the container layer.
-- **Security:** the container listens on `0.0.0.0:8787` so clients outside it can connect — there is **no authentication**, so expose the port only on a trusted network (same caveat as `--host 0.0.0.0` below). The web UI and `/__bili/*` JSON endpoints work unchanged through the mapped port.
+- **Security:** The example publishes the proxy on host loopback. The proxy has no client authentication. The management UI accepts loopback peers inside the container, and a Docker bridge connection from the host can be denied.
 - **Healthcheck:** the image ships a `HEALTHCHECK` probing `/__bili/health` on 8787 via node's builtin fetch (no curl needed in the slim base); if you override the listen port, remember the probe stays pinned to 8787.
 
 ### Flags
@@ -533,6 +507,8 @@ Client-facing connections close gracefully after the final response: when the pr
 
 ### Self-update
 
+This feature is off by default in the fork. To enable it, set `ACP_AUTO_UPDATE=1`.
+
 The proxy checks npm on startup and every 3 minutes; a newer version is installed in place and a notice is logged — **restart `bili` to pick it up**, unless you enable opt-in self-restart (`--auto-restart-on-update` flag, env `ACP_AUTO_RESTART_ON_UPDATE=1`, or `"autoRestartOnUpdate": true` in config — default OFF): with zero in-flight requests it verifies the new install, stops accepting connections, drains, spawns a replacement on the same port, and exits once it accepts connections (clients reconnect automatically; session state survives on disk). Safety gates: zero in-flight through the drain window, an install sanity check before re-exec, and a 10-minute cooldown marker so a flapping version can never loop-restart; any failure resumes the original listener and falls back to the plain reminder.
 
 **Staggered rollout (#3619):** a discovered version is not applied immediately by automatic updates. Each instance draws ONE random moment inside a delay window (built-in default **15 min – 48 h**) and upgrades when it arrives; the drawn moment is persisted, so restarts never re-roll. Fleet upgrades therefore spread across the window instead of completing within minutes of a release, leaving time to catch a bad release mid-rollout (#3401/#3600/#3394). The window plus emergency controls live in a public policy file (`auto-update-policy.json` in this repo, fetched anonymously with ETag caching): `hold` freezes automatic upgrades fleet-wide, `blocked` skips listed versions, `pinned` sets an upgrade ceiling. Fail-open by design — an unreachable or malformed file simply falls back to local defaults, and the file can steer timing/skip/pin only, never what gets installed. Per-machine exits: manual `bili update` bypasses `hold`/stagger (still respects `blocked`/`pinned`), `"staggerMinDelayMs": 0` + `"staggerMaxDelayMs": 0` (or `BILI_UPDATE_STAGGER_MIN_MS`/`BILI_UPDATE_STAGGER_MAX_MS`) restore legacy immediate upgrades, and `ACP_AUTO_UPDATE=0` disables auto-updates entirely. Full format and semantics: [docs/configuration.md → `update`](docs/configuration.md#update).
@@ -554,6 +530,8 @@ A **long-lived** standalone proxy can keep holding stale OS-resolver state after
 - **Route egress through an upstream proxy** — `-F http://<host:port>` or `BILI_UPSTREAM_PROXY=… BILI_UPSTREAM_PROXY_MODE=auto`: the destination is then resolved remotely by that proxy, so bili never consults its own (stale) resolver for admission.
 
 ### Critical-defect advisories (forced updates)
+
+This feature is off by default in the fork. To enable it, set `BILI_ADVISORY_CHECK=1`.
 
 Independent of auto-update (#1481): even with `autoUpdate` off, the proxy polls a small companion npm package (`billion-context-advisories`, published by CI from this repo's [`advisories/`](advisories/) directory) on the same 3-minute cadence. Each advisory names a semver range of broken versions (`affected`), the exact version to install (`target` — which may be *older* than the current one, i.e. a rollback), and a user-facing `reason`. When the local version falls inside `affected`, bili force-installs `target` through the self-updater's full safety chain (cross-process lock, backup + verify + rollback; source checkouts and host-managed installs are refused with manual instructions instead) and warns prominently: a one-time `[advisory] ⚠️ …` log line per process per advisory id, a banner on the web UI showing the reason and the exact manual upgrade command, and the active entry under `advisory` in `/__bili/status`. The check is fail-open by design: an unreachable or malformed advisory source only produces a warning — model traffic is never blocked by it. Disable via config (`"advisoryCheck": false`) or env (`BILI_ADVISORY_CHECK=0`); point at a custom document with `"advisoryUrl"` / `BILI_ADVISORY_URL`.
 

@@ -10,6 +10,7 @@
 // leave this placeholder squatting the port into the next port-ladder round.
 
 import http from "node:http";
+import { adminGateDenial } from "./server/admin-access.js";
 
 const PERMISSION_DENIED_SIGNATURE =
     /\b(?:EPERM|EACCES|EROFS|EBUSY)\b|operation not permitted|permission denied|read-only file system|readonly database/i;
@@ -34,6 +35,7 @@ interface StartupFailureInfo {
     hintZh: string;
     lane: string | undefined;
     origin: string;
+    bindHost: string;
 }
 
 /** #5096: flatten a caught startup error into page-safe fields. fs errors
@@ -51,7 +53,8 @@ export function startupFailureInfo(err: unknown, host: string, port: number): St
         hint: classifyStartupFailure(flat),
         hintZh: HINT_ZH,
         lane: process.env.BILI_LAUNCHER_LANE,
-        origin: `http://${host}:${port}/__bili/`,
+        bindHost: host,
+        origin: `http://${host.includes(":") && !host.startsWith("[") ? `[${host}]` : host}:${port}/__bili/`,
     };
 }
 
@@ -98,8 +101,13 @@ ${hint}
 
 export function createStartupFailureHandler(info: StartupFailureInfo): http.RequestListener {
     return (req, res) => {
-        const url = new URL(req.url ?? "/", info.origin);
-        if (url.pathname === "/__bili/health") {
+        res.setHeader("cache-control", "no-store");
+        if (adminGateDenial(req, info.bindHost)) {
+            res.writeHead(403, { "content-type": "text/plain; charset=utf-8" });
+            res.end("Access denied");
+            return;
+        }
+        if (req.url?.split("?", 1)[0] === "/__bili/health") {
             // 503 + ok:false — a probe must never adopt this placeholder as a
             // healthy instance (probeHealth/fetchHealthInfo treat !res.ok as
             // not-bili), it only explains why the port answers at all.

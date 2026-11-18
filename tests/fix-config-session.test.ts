@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadOptions, parseUpstreamProxyMode } from "../src/config.ts";
 import { resolveProxyDecision } from "../src/upstream-proxy.ts";
-import { SessionStore, _setStoreForTest } from "../src/persist.ts";
+import { SessionStore, _resetStoreForTest, _setStoreForTest } from "../src/persist.ts";
 import {
     acquireInFlight,
     getSession,
@@ -107,6 +107,16 @@ test("loadOptions: PORT env also validated (ACP_PORT absent)", () => {
     assert.throws(() => loadOptions({ PORT: "99999" }), /Invalid port/);
 });
 
+test("registry updates and feeds require an explicit opt-in", () => {
+    for (const [env, expected] of [[{}, false], [{
+        ACP_AUTO_UPDATE: "1", BILI_ADVISORY_CHECK: "1", BILI_RELEASE_NOTES_CHECK: "1",
+    }, true]] as const) {
+        const opts = loadOptions(env);
+        assert.deepEqual([opts.autoUpdate, opts.advisoryCheck, opts.releaseNotesCheck],
+            [expected, expected, expected]);
+    }
+});
+
 test("loadOptions: ACP_HOST=localhost is normalized to 127.0.0.1; explicit hosts pass through", () => {
     assert.equal(loadOptions({ ACP_HOST: "localhost" }).host, "127.0.0.1");
     assert.equal(loadOptions({ ACP_HOST: "0.0.0.0" }).host, "0.0.0.0");
@@ -165,6 +175,7 @@ test("getSession: evict-then-revisit reload enforces MAX_SESSIONS (#1064)", () =
         assert.equal(_sessionsSizeForTest(), 1, "reload must evict first — pool stays at MAX");
     } finally {
         _resetSessionsForTest();
+        _resetStoreForTest();
         rmrf(dir);
     }
 });

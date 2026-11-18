@@ -3,7 +3,7 @@
  *
  * One reusable facility behind every web warning: assemble a ready-to-paste
  * diagnostic blob (environment facts + host client versions + sanitized bili
- * config + one topic-specific section) plus a prefilled GitHub issue link, so
+ * config + one topic-specific section) plus a blank GitHub issue link, so
  * any future warning can offer "copy diagnostics / report on GitHub" without
  * inventing its own plumbing. Consumers (one topic each): the SQLite legacy-only
  * degradation banner (`storage-legacy-only`), the snapshot-render shadow banner
@@ -19,18 +19,10 @@
  * `--- recent conflict-related log lines ---` (the exact signatures a
  * maintainer greps to adjudicate a native-compaction episode).
  *
- * PUBLISH DISCIPLINE: the blob lands in a PUBLIC GitHub issue body (copied
- * verbatim AND embedded in the prefilled URL). Every byte passes redactForPublish
- * at the SINK (buildDiagnostics) — unconditional host masking + credential-shape
- * scrubbing, ignoring BILI_LOG_MASK_HOSTS so the local host-visibility preference
- * can never weaken the publish boundary (#3811/#4427). Per-section redaction
- * (config values, log tails, storage reason strings) runs upstream too; the sink
- * is the guarantee that NO topic — present or future — can leak a private host, a
- * credential shape, or a user-identifying home path (redactForPublish also rewrites
- * $HOME→~ across the whole blob) even if its author forgets. Only profile NAMES are
- * included; the storage force-retry lever keeps its absolute marker path for
- * actionability, but the sink ~-normalizes any $HOME prefix so no username reaches
- * the public body (#4427).
+ * Reports are local until a user copies, reviews, and shares them. Scrub common
+ * credential shapes, private hosts, and home paths at the final output boundary.
+ * Free-text fields can still identify a user or project. The external issue
+ * link must never contain the diagnostic text or machine details.
  *
  * Contract: NEVER throws — every fs/listSessions access is guarded so a
  * broken log file or an unbuilt store degrades the blob, not the endpoint.
@@ -58,10 +50,7 @@ import { BUILD_COMMIT, PACKAGE_NAME, VERSION } from "../version.js";
 
 const GITHUB_NEW_ISSUE_URL = "https://github.com/ranxianglei/billion-context/issues/new";
 const STORAGE_LOG_TAIL_LINES = 12;
-// #3611: budgets keep the blob pasteable. The copy button carries it
-// verbatim and is the reliable channel; the prefilled issues/new URL embeds
-// the same blob in its query string, which on worst-case (full-budget,
-// CJK-heavy) logs can still outgrow conservative proxy request-line limits.
+// Bound the size of a report copied to the clipboard.
 const CONFIG_SECTION_MAX_CHARS = 1600;
 const CONFLICT_LOG_TAIL_LINES = 20;
 const LOG_LINE_MAX_CHARS = 240;
@@ -292,13 +281,15 @@ function hostClientVersionLines(): string[] {
 // keys / proxy URLs are masked after serialization by maskUrlsForPublish, which
 // runs unconditionally (publish boundary, ignores BILI_LOG_MASK_HOSTS) and drops
 // userinfo/query/hash, so the old userinfo-only strip below is subsumed.
-const SECRET_KEY_RE = /key|token|secret|password|passwd|credential|auth/i;
+const SECRET_KEY_RE = /key|token|secret|password|passwd|credential|auth|cookie|^headers$/i;
 
 function maskSecretValues(node: unknown, key?: string): unknown {
     // propagate the parent key into elements: an array under a secret-named
     // key holds secrets too ({"apiKey": ["…"]} must never pass through raw)
     if (Array.isArray(node)) return node.map((v) => maskSecretValues(v, key));
     if (node !== null && typeof node === "object") {
+        // Custom headers and named credential maps can use arbitrary child keys.
+        if (key !== undefined && SECRET_KEY_RE.test(key)) return "***";
         const out: Record<string, unknown> = {};
         for (const [k, v] of Object.entries(node as Record<string, unknown>)) out[k] = maskSecretValues(v, k);
         return out;
@@ -489,21 +480,12 @@ export async function buildDiagnostics(topic?: string): Promise<DiagnosticsRepor
     if (def) lines.push(...def.section(ctx));
     lines.push(...hostClientVersionLines());
     lines.push(...configSectionLines());
-    // #4427: sink-level publish net — the blob lands in a PUBLIC GitHub issue
-    // body (copied verbatim AND embedded in the prefilled URL), so EVERY byte of
-    // every topic passes unconditional host masking + credential scrubbing right
-    // before serialization. This is the real choke point the header promises: it
-    // stops relying on each topic author remembering to sanitize its own fields
-    // (the storage section's raw log tail / free-form reason strings are exactly
-    // what slipped through before). Idempotent over the per-section redaction
-    // already applied upstream; both `blob` and the URL body derive from this one
-    // string so they can never diverge.
+    // Redact every topic before making the report available for copying.
     const blob = redactForPublish(lines.join("\n"));
     const title = def
         ? def.title()
         : `bili diagnostics report (v${VERSION}, node ${process.version}, ${process.platform}-${process.arch})`;
-    const url = `${GITHUB_NEW_ISSUE_URL}?title=${encodeURIComponent(title)}&body=${encodeURIComponent(blob)}`;
-    return { blob, title, url };
+    return { blob, title, url: GITHUB_NEW_ISSUE_URL };
 }
 
 export function _candidateLogReadsForTest(): number {

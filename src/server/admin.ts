@@ -23,14 +23,14 @@ import { getUpdateVisibility, updateBannerPayload } from "../update-notes.js";
 import { installVersionAction, triggerManualCheck, updateActionsAvailable, updateStateSnapshot } from "./update-actions.js";
 import { getUnrecognizedPathStats } from "./observability.js";
 import { getStore } from "../persist.js";
-import { BodyTooLargeError, headerValue, readBody } from "../server.js";
+import { BodyTooLargeError, readBody } from "../server.js";
 import { dismissHostPlugin, visibleHostPluginNotices } from "../host-plugin-notice.js";
 import { dismissUpgradeNotice } from "../pck-notice.js";
 import { mergedNotices, localDismissKey, localDismissMode, markInstanceDismissal } from "../announcements.js";
 import { remoteAnnouncementPayloads, remoteDismissKey, remoteDismissMode } from "../remote-notices.js";
 import { listSessions, memoryReport, peekSession, splitSessionWarnings, totalInFlight } from "../session.js";
-import { BILI_TUNNEL_HEADER } from "../tunnel-guard.js";
-import { isLoopbackAddress } from "../util.js";
+import { adminGateDenial } from "./admin-access.js";
+export { adminGateDenial } from "./admin-access.js";
 import { clearUpstreamAlertsForHost, getUpstreamAlerts, getUpstreamHealthReport } from "../upstream-alerts.js";
 import { pckAblations } from "../pck-probe.js";
 import { formatUpstreamError, getUpstreamConnectionStatus, proxyDispatcher, recordUpstreamConnection, resetProxyCache, resolveProxyDecision } from "../upstream-proxy.js";
@@ -73,101 +73,6 @@ interface AdminCtx {
     bootReady: () => boolean;
 }
 
-// #1537: reduce a Host-header value or a URL hostname to its bare lowercase
-// name — strip a trailing :port and the [..] brackets around an IPv6 literal.
-// Returns undefined for empty/unparseable input. The admin-origin gate uses it
-// to match on the hostname alone (see isTrustedAdminOrigin).
-function normalizeAdminHostname(value: string | undefined): string | undefined {
-    if (!value) return undefined;
-    const v = value.trim().toLowerCase();
-    if (!v) return undefined;
-    if (v.startsWith("[")) {
-        const end = v.indexOf("]");
-        if (end === -1) return undefined;
-        return v.slice(1, end);
-    }
-    // Bare IPv6 literal (no brackets): more than one colon means there is no
-    // host:port split to perform — return it untouched.
-    if ((v.match(/:/g) ?? []).length > 1) return v;
-    const idx = v.lastIndexOf(":");
-    if (idx !== -1) return v.slice(0, idx);
-    return v;
-}
-
-function isTrustedAdminOrigin(origin: string | undefined, host: string | undefined, trustedHostnames: Set<string>): boolean {
-    // Host must name one of OUR loopback identities regardless of whether an
-    // Origin header is present. A same-origin browser GET/fetch (the DNS
-    // rebinding read path: evil.com → 127.0.0.1) often carries NO Origin
-    // header, so gating on Origin alone would leave config reads exposed.
-    // #1537: match on the bare hostname and IGNORE the port — an SSH forward
-    // (ssh -L 18787:127.0.0.1:8787) legitimately presents a different local
-    // port while still arriving from loopback. The anti-rebinding property is
-    // preserved because an attacker's rebound domain (evil.com) can never equal
-    // a loopback NAME; only the port is relaxed.
-    const hn = normalizeAdminHostname(host);
-    if (!hn || !trustedHostnames.has(hn)) return false;
-    if (!origin) return true; // non-browser client (curl, CLI UI) on a trusted Host
-    try {
-        const parsed = new URL(origin);
-        // #3513 (desktop variant): the dsh desktop Electron app renders its
-        // settings pane from the custom scheme origin dsh-app://app, not an
-        // http origin. Browsers set the Origin header themselves — page
-        // content cannot forge it — and the dsh-app scheme exists only inside
-        // the dsh Electron app (a registered custom protocol), so a website
-        // can never produce a request whose Origin is dsh-app://. Accepting
-        // that exact origin (scheme dsh-app, hostname "app") admits the
-        // desktop embed probe without weakening the anti-rebinding property:
-        // rebinding attacks arrive with http/https attacker hostnames and
-        // still fail the hostname check below. Any other custom scheme or a
-        // different dsh-app hostname stays rejected.
-        if (parsed.protocol === "dsh-app:") {
-            return normalizeAdminHostname(parsed.hostname) === "app";
-        }
-        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
-        const ohn = normalizeAdminHostname(parsed.hostname);
-        return ohn !== undefined && trustedHostnames.has(ohn);
-    } catch {
-        return false;
-    }
-}
-
-/** The set of hostnames we accept on management endpoints. DNS rebinding
- *  (attacker resolves evil.com → 127.0.0.1) can make a browser request carry
- *  Origin == Host == evil.com:port and still reach loopback; only pinning the
- *  Host to a loopback NAME defeats it. #1537: the port is deliberately NOT part
- *  of the identity — SSH port-forwarding (ssh -L <local>:127.0.0.1:<remote>)
- *  changes the local port while the connection still arrives from loopback, so
- *  matching the port would reject every forwarded session. Every previously
- *  accepted Host carried a loopback hostname, so dropping the port admits no
- *  non-loopback identity. */
-/** #3248: the /__bili/ gate for surfaces handled OUTSIDE handleAdminRoute
- *  (the incremental turn endpoint re-enters the proxy pipeline from
- *  handle.ts, so it cannot ride handleAdminRoute's dispatch — but it must
- *  pass the exact same loopback + trusted-origin + anti-tunnel checks).
- *  Exported for handle.ts; returns an error string, or undefined when the
- *  request may proceed. */
-export function adminGateDenial(req: http.IncomingMessage, bindHost: string): string | undefined {
-    if (headerValue(req, BILI_TUNNEL_HEADER) !== undefined) {
-        return "management endpoints are not reachable through the bili tunnel";
-    }
-    if (!isLoopbackAddress(req.socket.remoteAddress)) {
-        return `management endpoints are loopback-only; access denied for ${req.socket.remoteAddress ?? "unknown"}`;
-    }
-    if (!isTrustedAdminOrigin(req.headers.origin, req.headers.host, adminTrustedHostnames(bindHost))) {
-        return "management request origin does not match the local bili UI";
-    }
-    return undefined;
-}
-
-function adminTrustedHostnames(bindHost: string): Set<string> {
-    const names = ["localhost", "127.0.0.1", "::1"];
-    const bound = normalizeAdminHostname(bindHost);
-    if (bound && bound !== "0.0.0.0" && bound !== "::" && !names.includes(bound)) {
-        names.push(bound);
-    }
-    return new Set(names);
-}
-
 /** #3343: the management-plane prefix test — the two internal prefixes the
  *  loopback + trusted-origin + anti-tunnel gate protects (handleAdminRoute).
  *  Shared with the incremental-lane marker divert in handle.ts, which must
@@ -201,41 +106,14 @@ function auxProxyShot(opts: ProxyOptions): { proxy: string | null; source: strin
 
 export async function handleAdminRoute(req: http.IncomingMessage, res: http.ServerResponse, ctx: AdminCtx): Promise<void> {
     const { opts, core, config, log, instanceId, instanceStartedAt, proxyWatchers, initialWatcherPid, watcherLastSeen } = ctx;
-    // SECURITY: the /__bili/ management endpoints (config read/write, reload,
-    // session stats) are privileged — a remote caller who can reach them can
-    // rewrite upstream routing to exfiltrate API keys (MITM). Restrict them
-    // to loopback connections. The proxy default host is 127.0.0.1 (loopback
-    // only), but a user can set --host 0.0.0.0 to share the proxy on a LAN —
-    // in that case we still must NOT expose management to the LAN. Only the
-    // proxy /bili/ and CONNECT (model traffic) endpoints remain open to all.
-    // #1073/#3245: self-addressed absolute-form requests arrive already
-    // rewritten to origin form by handle() (selfAddressedLocalPath), so the
-    // gates below always judge a path, never a full URL.
     const isAdminPath = isManagementPath(req.url);
-    // #409: management must never be reachable THROUGH the bili tunnel, not
-    // even from a loopback client: the tunnel's inner connection originates
-    // from the proxy itself, so the remoteAddress gate alone is satisfied and
-    // a `--host 0.0.0.0` peer could otherwise PUT /__bili/config over the
-    // tunnel. forward() stamps this marker on every /bili/ absolute-URL
-    // forward; clients have no legitimate reason to send it, and a spoofed
-    // value only locks the spoofer out of admin paths.
-    if (isAdminPath && headerValue(req, BILI_TUNNEL_HEADER) !== undefined) {
-        res.writeHead(403, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "management endpoints are not reachable through the bili tunnel" }));
-        return;
-    }
-    if (isAdminPath && !isLoopbackAddress(req.socket.remoteAddress)) {
-        res.writeHead(403, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "management endpoints are loopback-only; access denied for " + (req.socket.remoteAddress ?? "unknown") }));
-        return;
-    }
-    // localPort, not opts.port: when listening on port 0 (dynamic assignment,
-    // programmatic embedding, tests) the real port differs from opts.port and
-    // pinning to the configured value would 403 every admin request.
-    if (isAdminPath && !isTrustedAdminOrigin(req.headers.origin, req.headers.host, adminTrustedHostnames(opts.host))) {
-        res.writeHead(403, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: "management request origin does not match the local bili UI" }));
-        return;
+    if (isAdminPath) {
+        const denial = adminGateDenial(req, opts.host);
+        if (denial) {
+            res.writeHead(403, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: denial }));
+            return;
+        }
     }
     if (req.method === "GET" && req.url === "/__bili/stats") return sendStats(res);
     if (req.method === "GET" && req.url?.startsWith("/__bili/cache-report")) return sendCacheReport(res, req.url);
@@ -280,7 +158,7 @@ export async function handleAdminRoute(req: http.IncomingMessage, res: http.Serv
             return;
         }
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: true, upstream: opts.upstream }));
+        res.end(JSON.stringify({ ok: true }));
         return;
     }
     // #3536/#4830: browsers probing the proxy origin for a favicon (the dsh
@@ -338,7 +216,7 @@ export async function handleAdminRoute(req: http.IncomingMessage, res: http.Serv
         };
         // #3xxx: the dsh settings pane's #3100 pre-flight fetches this route
         // CROSS-ORIGIN (dsh web serves the page on its own port, the proxy on
-        // another — both loopback names, so isTrustedAdminOrigin above accepts
+        // another — both loopback names, so the management origin gate accepts
         // the request; the dsh DESKTOP app renders the pane from the custom
         // scheme origin dsh-app://app, which the gate also accepts), but a cors-mode fetch is only readable when the
         // response carries access-control-allow-origin. Without it the probe
@@ -1389,7 +1267,7 @@ async function sendOverview(res: http.ServerResponse, opts: ProxyOptions, laneHo
     }, null, 2));
 }
 
-/** #3040: generic diagnostics report — copyable blob + prefilled GitHub issue
+/** #3040: generic diagnostics report — copyable report + blank GitHub issue
  *  link. Loopback-gated like every other /__bili/* route; never throws. */
 async function sendDiagnostics(res: http.ServerResponse, url: string | null): Promise<void> {
     let topic: string | undefined;
@@ -1398,7 +1276,7 @@ async function sendDiagnostics(res: http.ServerResponse, url: string | null): Pr
     } catch {
         topic = undefined;
     }
-    res.writeHead(200, { "content-type": "application/json" });
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify(await buildDiagnostics(topic), null, 2));
 }
 

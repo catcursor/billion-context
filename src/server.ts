@@ -131,7 +131,8 @@ import { BILI_TUNNEL_HEADER, checkTunnelDestination, classifyIp, localMachineIps
 
 import { decodeRequestBody, DecompressedTooLargeError } from "./content-encoding.js";
 import { dropCompatFieldsJson } from "./compat-drop.js";
-import { handleAdminRoute } from "./server/admin.js";
+import { handleAdminRoute, isManagementPath } from "./server/admin.js";
+import { adminGateDenial } from "./server/admin-access.js";
 import { handle } from "./server/handle.js";
 import { bodyDumpEnabled, getUnrecognizedPathStats, isModelDiscoveryPath, logDumpFailure, logUnrecognizedPath } from "./server/observability.js";
 import {
@@ -3189,12 +3190,8 @@ export function buildForwardTarget(
     // #409: mark every /bili/ absolute-URL forward so a management plane
     // reached through this tunnel (self, NAT hairpin, chained bili) can
     // recognize and reject it — see the admin gate in handle().
-    // #1073: exception — loopback peer → loopback IP-literal destination on a
-    // management path: any same-machine process can already connect straight
-    // to that destination's port, so the marker adds no protection there while
-    // it 403s legitimate inter-instance probes (health checks between sibling
-    // instances). Remote peers and non-literal hostnames keep the marker
-    // unconditionally (NAT-hairpin / DNS-rebinding protection intact).
+    // #1073: preserve trusted local health probes between sibling instances.
+    // Authorize the original request before replacing Host with the destination.
     if (route?.tunnel) {
         let destLoopback = false;
         let destAdminPath = false;
@@ -3202,12 +3199,12 @@ export function buildForwardTarget(
             const du = new URL(upstreamUrl);
             const lit = parseIpLiteral(du.hostname.replace(/^\[|\]$/g, ""));
             destLoopback = lit !== null && classifyIp(lit) === "loopback";
-            const dp = du.pathname;
-            destAdminPath = dp === "/__bili/" || dp.startsWith("/__bili/") || dp === "/__acp/" || dp.startsWith("/__acp/");
+            destAdminPath = isManagementPath(du.pathname);
         } catch {
             // unparseable upstream URL — stamp defensively
         }
-        if (!(isLoopbackAddress(req.socket.remoteAddress) && destLoopback && destAdminPath)) headers[BILI_TUNNEL_HEADER] = "1";
+        const trustedAdminProbe = destLoopback && destAdminPath && adminGateDenial(req, opts.host) === undefined;
+        if (!trustedAdminProbe) headers[BILI_TUNNEL_HEADER] = "1";
     }
     headers["host"] = new URL(upstreamUrl).host;
     // #3073: shared with the WS lane's final egress so probe and turn carry

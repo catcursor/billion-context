@@ -96,9 +96,7 @@ function assertReport(report: Report, expected: string, suffix = false): void {
     assert.ok(report.blob.split("\n").some((line) => suffix ? line.endsWith(expected) : line === expected),
         `expected the bounded evidence line ${JSON.stringify(expected)} in ${report.blob}`);
     assert.equal(report.blob.isWellFormed(), true, "truncation preserves valid Unicode");
-    const url = new URL(report.url);
-    assert.equal(url.searchParams.get("body"), report.blob, "prefilled issue body exactly matches copyable diagnostics");
-    assert.equal(url.searchParams.get("title"), report.title);
+    assert.equal(report.url, "https://github.com/ranxianglei/billion-context/issues/new");
 }
 
 for (const source of ["storage log", "conflict log", "config", "conflict detail", "topic", "user-agent"] as const) {

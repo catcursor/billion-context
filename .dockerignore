@@ -1,4 +1,23 @@
-# The Dockerfile installs from npm at build time and COPYs nothing from the
-# context — keep the context minimal when building from the repo root.
+# Only send build inputs and shipped package assets to the Docker daemon.
 *
 !Dockerfile
+!package*.json
+!tsconfig*.json
+!tsup.config.ts
+!src/
+!kernel/
+!pi-subagents/
+!scripts/
+!LICENSE
+!README.md
+!docs/
+!hermes-plugin/
+!dsh.bundle.patch.yml
+!paper/
+!website/
+**/node_modules
+**/dist
+**/.git
+**/.env*
+**/*.log
+**/tests

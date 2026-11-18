@@ -6,6 +6,14 @@
 #   kind: env-only (no file key; key IS the env var name) · audience: user|internal|test · deprecated: true
 domain: server
 entries:
+  - key: publicMetadataRefresh
+    type: boolean
+    default: "false"
+    env: BILI_PUBLIC_METADATA_REFRESH
+    group: core
+    desc_en: "Set to true to refresh the model catalog from models.dev and the blog and changelog from GitHub. These services can observe the source IP and request time. Set the environment variable to 1 to enable."
+    desc_zh: "启用后会从 models.dev 获取模型目录，并从 GitHub 刷新博客和更新日志。这些服务可以看到来源 IP 和请求时间。环境变量设为 1 可启用。"
+    desc_ja: "有効にすると models.dev からモデルカタログを、GitHub からブログと変更履歴を取得します。各サービスには送信元 IP とリクエスト時刻が伝わります。環境変数で有効にする値は 1 です。"
   - key: port
     type: number
     default: "8787"

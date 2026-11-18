@@ -17,7 +17,7 @@ process.env.XDG_CACHE_HOME = path.join(root, "cache");
 const annDir = path.join(root, "announcements");
 const snapshotFile = path.join(root, "cache", "billion-context", ".remote-notices-snapshot.json");
 
-const { resolveAnnouncementsUrl, parseRemoteDoc, runRemoteNoticesCheck, visibleRemoteRecords, remoteAnnouncementPayloads, remoteDismissMode, getRemoteNoticesState, _resetRemoteNoticesForTest } = await import("../src/remote-notices.ts");
+const { parseRemoteDoc, runRemoteNoticesCheck, visibleRemoteRecords, remoteAnnouncementPayloads, remoteDismissMode, getRemoteNoticesState, _resetRemoteNoticesForTest } = await import("../src/remote-notices.ts");
 const { mergedNotices } = await import("../src/announcements.ts");
 
 const REC = (over: Record<string, unknown> = {}): Record<string, unknown> => Object.assign({
@@ -39,11 +39,11 @@ function serve(handler: (res: http.ServerResponse) => void): Promise<{ url: stri
     });
 }
 
-test("resolveAnnouncementsUrl: official default, override verbatim", () => {
-    assert.equal(resolveAnnouncementsUrl(undefined), "https://raw.githubusercontent.com/ranxianglei/billion-context/master/announcements/remote.json");
-    assert.equal(resolveAnnouncementsUrl(""), resolveAnnouncementsUrl(undefined));
-    const relay = "http://relay.internal/bili/remote.json";
-    assert.equal(resolveAnnouncementsUrl(relay), relay);
+test("an unconfigured announcements feed performs no request", async (t) => {
+    const fetch = t.mock.method(globalThis, "fetch", () => { throw new Error("unexpected request"); });
+    await runRemoteNoticesCheck({}, true);
+    await runRemoteNoticesCheck({ remoteAnnouncementsUrl: " " }, true);
+    assert.equal(fetch.mock.callCount(), 0);
 });
 
 test("parseRemoteDoc: shape matrix, per-entry isolation, version gate", () => {

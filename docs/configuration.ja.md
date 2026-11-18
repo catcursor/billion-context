@@ -65,6 +65,7 @@
 
 | キー | 型 | デフォルト | 環境変数 | 説明 |
 |-----|------|---------|-----|-------------|
+| `publicMetadataRefresh` | boolean | false | BILI_PUBLIC_METADATA_REFRESH | 有効にすると models.dev からモデルカタログを、GitHub からブログと変更履歴を取得します。各サービスには送信元 IP とリクエスト時刻が伝わります。環境変数で有効にする値は 1 です。 |
 | `port` | number | 8787 | ACP_PORT, PORT | プロキシがリッスンするTCPポート（ユーザーゾーン；レーンスポーンされたプロキシは `BILI_ZONE_PORT` を使用）。 |
 | `host` | string | 127.0.0.1 | ACP_HOST | バインドアドレス。127.0.0.1 = ループバック専用；:: = デュアルスタック；0.0.0.0 は外部に公開（認証なし — 信頼できるネットワークのみ）。 |
 | `sessionHeader` | string | x-acp-session | ACP_SESSION_HEADER | 会話IDを保持するHTTPヘッダー；同じ値は圧縮状態を共有する。 |
@@ -230,7 +231,7 @@
 
 | キー | 型 | デフォルト | 環境変数 | 説明 |
 |-----|------|---------|-----|-------------|
-| `autoUpdate` | boolean | true | ACP_AUTO_UPDATE | 自動 npm バージョンチェック（約 3 分ごと）；ACP_AUTO_UPDATE=0 または --no-auto-update で無効化。 |
+| `autoUpdate` | boolean | false | ACP_AUTO_UPDATE | 自動 npm バージョンチェック（約 3 分ごと）；ACP_AUTO_UPDATE=1 で有効化。 |
 | `autoRestartOnUpdate` | boolean | false | ACP_AUTO_RESTART_ON_UPDATE | 新しいバージョンがインストールされた後、デーモンを自動的に再起動する。 |
 | `updateTag` | string | latest | ACP_UPDATE_TAG | セルフアップデート用の npm dist-tag チャンネル：latest（デフォルト）、dev、または pr。 |
 | `update` | object | {} (all defaults) | — | セルフアップデートのチャンネル設定。 |
@@ -239,10 +240,10 @@
 | `update.staggerMinDelayMs` | number \| string | 900000 (built-in 15 min) | BILI_UPDATE_STAGGER_MIN_MS | #3619 スタグダードロールアウト: このマシンのベースアップグレード遅延ウィンドウの下限; ms 数値または期間文字列 (15m / 2d / 1d12h); 0 で遅延を無効化 (従来の即時実行)。リモートポリシーのデフォルトウィンドウとバージョン別の上書きがこれに重ねて適用される。 |
 | `update.staggerMaxDelayMs` | number \| string | 172800000 (built-in 48 h) | BILI_UPDATE_STAGGER_MAX_MS | #3619 スタグダードロールアウト: このマシンのベースアップグレード遅延ウィンドウの上限; ms 数値または期間文字列 (48h / 2d); min とともに 0 に設定すると従来の即時アップグレードに戻る。 |
 | `update.policyUrl` | string | official repo raw URL | BILI_UPDATE_POLICY_URL | リモート自動更新ポリシーファイルの URL 上書き (テスト用シーム — 本番環境では公式リポジトリに固定される)。 |
-| `advisoryCheck` | boolean | true | BILI_ADVISORY_CHECK | 重大な欠陥に関するアドバイザリーウォッチャー; 実行中のバージョンが影響を受ける場合、推奨される修正を強制インストールする。 |
+| `advisoryCheck` | boolean | false | BILI_ADVISORY_CHECK | 重大な欠陥に関するアドバイザリーウォッチャー; 実行中のバージョンが影響を受ける場合、推奨される修正を強制インストールする。 |
 | `advisoryUrl` | string | unset (built-in feed) | BILI_ADVISORY_URL | アドバイザリーフィードの URL 上書き。 |
-| `remoteAnnouncementsUrl` | string | unset (official feed: GitHub master announcements/remote.json) | BILI_ANNOUNCEMENTS_URL | リモートアナウンスメントフィードの URL 上書き (#5548): JSON ドキュメント {v: 1, entries: [...]} — ローカルアナウンスメントファイルと同じレコードスキーマ。他のウォッチャーと同様に約 3 分ごとに取得され、キャッシュされたスナップショットは再起動や障害後も維持される。ファイアウォールインストールではこれをリレーミラーに向ける。不正なプッシュは拒否され、最後に正常だったコピーが表示され続ける。`<config dir>/announcements/*.json` 内のローカルファイルは、同じ ID のリモート/組み込み通知を常にシャドウする。エントリは任意の `requiresScan: { "client", "knownId"? }` フィールドを持てます — ライブ競合スキャンゲートで、そのクライアントの読み取り専用プラグインレジストリスキャンが実際に該当プラグインを報告した場合（いずれかの所見、または `knownId` 一致）以外ではバナーは非表示のままです。そのためマシン固有の競合のブロードキャストは、競合が存在するマシンで正確に表示されます (#5984)。 |
-| `releaseNotesCheck` | boolean | true | BILI_RELEASE_NOTES_CHECK | Web パネル用のリリースノートフィード (取得とキャッシュのみ; 何もインストールしない)。 |
+| `remoteAnnouncementsUrl` | string | unset (disabled) | BILI_ANNOUNCEMENTS_URL | リモートアナウンスメントフィードの URL 上書き (#5548): JSON ドキュメント {v: 1, entries: [...]} — ローカルアナウンスメントファイルと同じレコードスキーマ。他のウォッチャーと同様に約 3 分ごとに取得され、キャッシュされたスナップショットは再起動や障害後も維持される。ファイアウォールインストールではこれをリレーミラーに向ける。不正なプッシュは拒否され、最後に正常だったコピーが表示され続ける。`<config dir>/announcements/*.json` 内のローカルファイルは、同じ ID のリモート/組み込み通知を常にシャドウする。エントリは任意の `requiresScan: { "client", "knownId"? }` フィールドを持てます — ライブ競合スキャンゲートで、そのクライアントの読み取り専用プラグインレジストリスキャンが実際に該当プラグインを報告した場合（いずれかの所見、または `knownId` 一致）以外ではバナーは非表示のままです。そのためマシン固有の競合のブロードキャストは、競合が存在するマシンで正確に表示されます (#5984)。 |
+| `releaseNotesCheck` | boolean | false | BILI_RELEASE_NOTES_CHECK | Web パネル用のリリースノートフィード (取得とキャッシュのみ; 何もインストールしない)。 |
 | `releaseNotesUrl` | string | unset (built-in feed) | BILI_RELEASE_NOTES_URL | リリースノートフィードの URL 上書き。 |
 
 **診断 & チューニング**
@@ -756,9 +757,9 @@
 ### `autoUpdate`
 
 - **Type:** `boolean`
-- **Default:** `true`
+- **Default:** `false`
 - **Status:** ACTIVE
-- **Description:** 定期的な npm レジストリバージョンチェック (`update.checkIntervalMs` ごと、デフォルト 3 分; プロセスごとの最初のチェックはスロットリングを無視する)。設定された `updateTag` チャンネル上の新しいビルドを検出する; 実行中のプロセスが実際に切り替えるかどうかは、`autoRestartOnUpdate` (自己再起動) または助言レーン (強制インストール) に依存する。`ACP_AUTO_UPDATE=0` で無効化。`advisoryCheck` とは独立: オートアップデートをオフにしたインストールでも、助言ウォッチャーを通じて既知の壊れたバージョン範囲を回避できる。#3619 以降、発見されたアップグレードは即座に適用されない — 自動アップグレードはランダムな遅延ウィンドウ内で段階的に実行される (組み込み 15 分 – 48 時間、リモートポリシーで調整可能; 以下の [`update`](#update) を参照) ため、悪いリリースは全フリートが移動した後にではなく、ロールアウト中に捕捉できる。
+- **Description:** npm からの定期更新を有効にします。上流版をインストールするとフォークが置き換わります。 `ACP_AUTO_UPDATE=1`.
 
 ### `autoRestartOnUpdate`
 
@@ -776,9 +777,9 @@
 ### `advisoryCheck`
 
 - **Type:** `boolean`
-- **Default:** `true`
+- **Default:** `false`
 - **Status:** ACTIVE
-- **Description:** 重大欠陥アドバイザリーウォッチャー (#1481): 関連パッケージ `billion-context-advisories`（`advisories/` から CI 経由で公開）をポーリングし、実行中のバージョンが宣言された破損範囲内にある場合、固定された `target` バージョン（ロールバックの場合を含む）を強制インストールします。`autoUpdate` に独立して動作するため、自動更新をオフにしたインストールでも、既知の破損バージョンからの強制更新が行われます。フェイルオープン方式: ソースに到達できない場合や形式が不正な場合は警告のみ出力し、モデルトラフィックをブロックすることはありません。`BILI_ADVISORY_CHECK=0` で無効化できます。
+- **Description:** 独立したアドバイザリー監視を有効にします。上流版がインストールされる場合があります。 `BILI_ADVISORY_CHECK=1`.
 
 ### `advisoryUrl`
 
@@ -790,9 +791,9 @@
 ### `releaseNotesCheck`
 
 - **Type:** `boolean`
-- **Default:** `true`
+- **Default:** `false`
 - **Status:** ACTIVE
-- **Description:** リリースノート可視化ウォッチャー (#1870): 関連文書 `billion-context-release-notes` を取得し、保留中のスパンに `critical` ティアのエントリが含まれている場合のみ、`acp_status` および `/acp` パネル上で "CRITICAL update ready — restart to finish" または "critical update available" を表示します。通常のリリースは表示されません（設計上サイレント、#1977）。インストールも再起動も行いません。フェイルオープン方式。`BILI_RELEASE_NOTES_CHECK=0` で無効化できます。
+- **Description:** リリースノートの定期取得を有効にします。 `BILI_RELEASE_NOTES_CHECK=1`.
 
 ### `releaseNotesUrl`
 
@@ -1907,7 +1908,7 @@ ACP ネイティブエージェント（現在は `pi` 拡張機能）は、プ�
 |---------|------------|--------|
 | `` | `pi.commands` | ["acp", "acp-cache"] |
 | `ACP_AUTO_RESTART_ON_UPDATE` | `autoRestartOnUpdate` | false |
-| `ACP_AUTO_UPDATE` | `autoUpdate` | true |
+| `ACP_AUTO_UPDATE` | `autoUpdate` | false |
 | `ACP_COMPRESS_NUDGE` | `compress.injectNudge` | true |
 | `ACP_COMPRESS_PROTOCOL` | `diagnostics.compressProtocol` | "tools" |
 | `ACP_COMPRESS_TOOL` | `compress.injectTool` | true |
@@ -1932,12 +1933,12 @@ ACP ネイティブエージェント（現在は `pi` 拡張機能）は、プ�
 | `ACP_SESSION_HEADER` | `sessionHeader` | x-acp-session |
 | `ACP_UPDATE_TAG` | `updateTag` | latest |
 | `ACP_UPSTREAM` | `upstream` | https://api.anthropic.com |
-| `BILI_ADVISORY_CHECK` | `advisoryCheck` | true |
+| `BILI_ADVISORY_CHECK` | `advisoryCheck` | false |
 | `BILI_ADVISORY_URL` | `advisoryUrl` | unset (built-in feed) |
 | `BILI_AFFINITY_SIMHASH` | `affinitySimhash` | true |
 | `BILI_ALLOW_DSH_COMPACTION` | `dsh` | {} |
 | `BILI_ALLOW_PRIVATE_HTTP_PROVIDERS` | `network.allowPrivateHttpProviders` | false |
-| `BILI_ANNOUNCEMENTS_URL` | `remoteAnnouncementsUrl` | unset (official feed: GitHub master announcements/remote.json) |
+| `BILI_ANNOUNCEMENTS_URL` | `remoteAnnouncementsUrl` | unset (disabled) |
 | `BILI_AUTO_MODE_FORGE` | `autoModeForge.enabled` | true |
 | `BILI_CACHE_KEEPALIVE` | `cacheKeepalive.enabled` | false |
 | `BILI_CACHE_KEEPALIVE_ARM_WITHOUT_BREAKPOINTS` | `cacheKeepalive.armWithoutBreakpoints` | false |
@@ -2009,9 +2010,10 @@ ACP ネイティブエージェント（現在は `pi` 拡張機能）は、プ�
 | `BILI_PREFLIGHT_DEAD_END_COOLDOWN_MS` | `network.preflightDeadEndCooldownMs` | 300000 |
 | `BILI_PREFLIGHT_HOLD_MS` | `network.preflightHoldMs` | 30000 |
 | `BILI_PROXY_KEEPALIVE_MAX_MS` | `network.proxyKeepAliveMaxMs` | 55000 (0 = one-shot connections) |
+| `BILI_PUBLIC_METADATA_REFRESH` | `publicMetadataRefresh` | false |
 | `BILI_PUBLIC_SNAPSHOT_CAP_BYTES` | `plugin.snapshotCapBytes` | 104857600 (0 disables snapshots) |
 | `BILI_RECEIVE_BODY_BYTES` | `network.receiveBodyBytes` | 5368709120 |
-| `BILI_RELEASE_NOTES_CHECK` | `releaseNotesCheck` | true |
+| `BILI_RELEASE_NOTES_CHECK` | `releaseNotesCheck` | false |
 | `BILI_RELEASE_NOTES_URL` | `releaseNotesUrl` | unset (built-in feed) |
 | `BILI_REPLAY_RETRY_BASE_MS` | `network.replayRetryBaseMs` | 1500 (0 disables the delay) |
 | `BILI_REPLAY_RETRY_MAX` | `network.replayRetryMax` | 3 (1 disables replays) |
@@ -2094,7 +2096,7 @@ ACP ネイティブエージェント（現在は `pi` 拡張機能）は、プ�
 | `ACP_HOST` | リスニングホストをオーバーライド。 |
 | `ACP_UPSTREAM` | デフォルトのアップストリームベース URL をオーバーライド。 |
 | `ACP_LOG` | `0` に設定すると、リクエストログを無効にします。 |
-| `ACP_AUTO_UPDATE` | `0` に設定すると、自動更新チェックを無効にします。ファイル設定キー: `autoUpdate`。 |
+| `ACP_AUTO_UPDATE` | `1` — npm からの定期更新を有効にします。上流版をインストールするとフォークが置き換わります。 |
 | `ACP_AUTO_RESTART_ON_UPDATE` | `1` (任意の `0` 以外の値) に設定すると、自動更新インストール後の自己再起動を有効にします (#811): 再起動には進行中のリクエストがゼロであること、インストール健全性チェックをパスすること、10 分間のクールダウンマーカーを尊重すること、失敗時に元のリスナーを再開することが必要です。ファイル設定キー: `autoRestartOnUpdate`。 |
 | `ACP_UPDATE_TAG` | 自動更新プログラムが追跡する dist-tag チャンネル (デフォルト `latest`、例: `dev`)。ファイル設定キー: `updateTag`。ローリング `pr` タグはすべての PR にわたる最新の PR テストビルドを追跡します; レガシーな PR 別 `pr-N` タグはその PR の最後のビルドで凍結され、明示的に設定された場合のみ追跡されます。ローリング `master` タグは master にマージされた最新のビルドを追跡します — すべての非リリースマージが 1 つ公開します (#2049); マージ済み但未リリースの状態を追跡するにはこれを設定してください。 |
 | `BILI_UPDATE_REGISTRY` | 自動更新プログラムと `bili update` が使用する npm レジストリのベース URL のオーバーライド (デフォルト `https://registry.npmjs.org`)。ループバックレジストリ (e2e スイートの `ACP_TEST_REGISTRY` 内の verdaccio インスタンス) に対する密閉テストを想定しています; 本番環境では未設定のままにしてください (#1153)。 |
@@ -2106,9 +2108,9 @@ ACP ネイティブエージェント（現在は `pi` 拡張機能）は、プ�
 | `BILI_DSH_RETRY_INTERVAL_MS` | dsh ネイティブプラグインのツール登録リトライ間のバックオフ (ms) (#2082): マニフェスト取得またはツール登録が一時的に失敗した後、次のリトライはこのクールダウンより早く行われません。デフォルトは `10000`; 数値でない場合や非正の値は `10000` にフォールバックします。テストフック — dsh-native ユニットテストでは壁時計を待たないように短縮されています; 本番環境では未設定のままにしてください。 |
 | `BILI_DSH_RECOVERY_INTERVAL_MS` | dsh ネイティブプラグインのデタッチされたリカバリータイマーの間隔 (ms) (#2082): ツールがダウンしている間、モデルトラフィックがゼロでも登録リトライを駆動し続けます — モデルが欠落ツールを諦め、他の何ものもループを再アームしない場合です。デフォルトでは `BILI_DSH_RETRY_INTERVAL_MS` (`10000`) に従います。テストフック — NODE_TEST_CONTEXT 下では、この変数が明示的に設定されない限りタイマーは開始されません; 本番環境では未設定のままにしてください。 |
 | `BILI_DSH_MAX_TESTED_VERSION` | テスト済みより新しい dsh ブートノートの上限 (dsh ネイティブレーン): 実行中の dsh ビルド — 注入されたバンドルの上にある最も近い `node_modules/@deepseek-ai/dsh/package.json` から解決 — はこの最新テスト済みバージョンと比較され (semver、プレリリース対応)、厳密に新しい場合、サポートが実装されるまで上限バージョンへのロールバックを助言する 1 つの永続的なブート時ノート (dsh セッション内) を得ます。片方向のみ: 上限以下または等しいビルドは沈黙します。既知の旧ビルドの破損モードには独自のオーバーレイラッチ検出器があるためです (#3806 ブート警告 + #2474 フォールバック)。設計上ソフトです: 警告のみで、トラフィックをゲートまたはブロックしません (誤った推測が動作しているセッションを停止させてはならないため)。デフォルト = `0.2.0-rc.2`、CI e2e アンカー (.github/workflows/ci-e2e-dsh-native.yml); ビルドが検証されるにつれて上限を上げてください; 空文字列はこのレーンでのチェックをオフにします。解決不能/解析不能なバージョンは沈黙にフェイルオープンします (証拠の欠如 ≠ 破損ビルド)。 |
-| `BILI_ADVISORY_CHECK` | `0` に設定すると、重大欠陥アドバイザリーウォッチャーを無効にします (#1481)。デフォルトはオン — `ACP_AUTO_UPDATE` に独立して実行されるため、自動更新をオフにしたインストールでも、既知の破損バージョン範囲から強制更新されます。フェイルオープン: 到達不能/不正なソースは警告のみで、モデルトラフィックをブロックしません。ファイル設定キー: `advisoryCheck`。 |
+| `BILI_ADVISORY_CHECK` | `1` — 独立したアドバイザリー監視を有効にします。上流版がインストールされる場合があります。 |
 | `BILI_ADVISORY_URL` | アドバイザリー文書 URL のオーバーライド。デフォルト: 設定されたレジストリ (`BILI_UPDATE_REGISTRY` 対応) 上のコンパニオンパッケージ `billion-context-advisories`。ファイル設定キー: `advisoryUrl`。 |
-| `BILI_RELEASE_NOTES_CHECK` | `0` に設定すると、リリースノート可視性ウォッチャーを無効にします (#1870)。デフォルトはオン — 純粋な可視性、デフォルトでは沈黙 (#1977): コンパニオンリリースノート文書をフェッチし、保留スパンに `critical` ティアのエントリを含む場合のみ、`acp_status` と `/acp` パネルで "CRITICAL update ready — restart to finish" (ディスクが実行中より新しい) または "critical update available" を表示します; 常時/推奨リリースは決して表示されません。決してインストールせず、再起動しません; フェイルオープン。ファイル設定キー: `releaseNotesCheck`。 |
+| `BILI_RELEASE_NOTES_CHECK` | `1` — リリースノートの定期取得を有効にします。 |
 | `BILI_RELEASE_NOTES_URL` | リリースノート文書 URL のオーバーライド。デフォルト: 設定されたレジストリ (`BILI_UPDATE_REGISTRY` 対応) 上のコンパニオンパッケージ `billion-context-release-notes`。ファイル設定キー: `releaseNotesUrl`。 |
 | ~~`BILI_HOST_USAGE_CREDIT`~~ / ~~`hostUsageCredit`~~ | **#660 で削除。** ホスト向けの使用量モードを選択するために使用されていました。#408 の非圧縮ベースラインバックフィルは完全に削除されました — すべてのホストは実際に転送された (折り畳み後) リクエストをプロバイダー測定として報告します (`[acp-usage] input=` に一致)。環境変数または設定ファイルに残された古い値は無視されます; 削除してください。PR #691 の "Bug history lesson" セクションを参照してください。 |
 | `ACP_PROVIDERS` | 外部 `providers.json` へのパス (レガシー / 共有ファイル)。 |

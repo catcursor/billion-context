@@ -167,3 +167,14 @@ test("#5146: tunneled requests are refused even from loopback", async () => {
     await handleAdminRoute(mkReq("127.0.0.1", { [BILI_TUNNEL_HEADER]: "1" }), res, makeCtx());
     assert.equal(out.code, 403);
 });
+
+test("the public root health probe returns only liveness", async () => {
+    const ctx = makeCtx();
+    ctx.opts.upstream = "https://tenant.example.invalid/private-route";
+    const req = mkReq("192.0.2.7");
+    req.url = "/";
+    const { res, out } = mkRes();
+    await handleAdminRoute(req, res, ctx);
+    assert.equal(out.code, 200);
+    assert.deepEqual(JSON.parse(out.body!), { ok: true });
+});

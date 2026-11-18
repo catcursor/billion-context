@@ -73,6 +73,12 @@ function staggerKnobMs(envName: string, fileValue: unknown): number {
     return NaN;
 }
 
+/** Public feed refreshes reveal the installation's IP address and usage times. */
+export function publicMetadataRefreshEnabled(): boolean {
+    const env = process.env.BILI_PUBLIC_METADATA_REFRESH;
+    return env === undefined ? loadConfigFile().publicMetadataRefresh === true : env === "1";
+}
+
 function fileNetwork() {
     return loadConfigFile().network ?? {};
 }

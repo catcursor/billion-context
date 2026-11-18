@@ -57,6 +57,9 @@ function makeFixture(): { root: string; dshHome: string; stateHome: string; conf
         dsh: { allowDshCompaction: false },
         myToken: "tok_abcdef123456",
         apiKeys: ["generic-secret-value-123456"],
+        credentials: { production: "opaque-credential-fixture" },
+        headers: { "X-Internal-Access": "opaque-header-fixture" },
+        cookie: "opaque-cookie-fixture",
         notes: "prose mentioning tokens and keys stays verbatim",
     });
     writeFileSync(path.join(stateHome, "billion-context", "bili.log"), [
@@ -102,6 +105,7 @@ test("#3611 conflict-banner report carries versions, masked config, and evidence
     assert.ok(!blob.includes("api.example.com"), "provider-table URL used as an object KEY must also be host-masked (#3811)");
     assert.ok(blob.includes("<private-host>"), "masked-host placeholder present in the config section (#3811)");
     assert.ok(blob.includes('"apiKeys":["***"]'), "array under a secret-named key is masked element-wise");
+    assert.ok(!blob.includes("opaque-"), "credential maps, cookies, and custom header values are masked");
     assert.ok(blob.includes('"nudgeGrowthTokens":50000'), "non-secret values stay verbatim");
     assert.ok(blob.includes('"allowDshCompaction":false'), "dsh block visible");
     assert.ok(blob.includes("prose mentioning tokens and keys stays verbatim"), "masking is key-based, not word-based");
@@ -122,10 +126,7 @@ test("#3611 conflict-banner report carries versions, masked config, and evidence
     assert.ok(!blob.includes(fx.root), "no absolute fixture path in blob");
     // enrichment appends AFTER the topic section (existing blob prefix stable).
     assert.ok(blob.indexOf("--- compression conflict ledger ---") < blob.indexOf("--- host client versions ---"), "topic section precedes enrichment");
-    // URL round-trip: the prefilled body decodes back to the exact blob.
-    const u = new URL(rep.url);
-    assert.equal(u.origin + u.pathname, "https://github.com/ranxianglei/billion-context/issues/new");
-    assert.equal(decodeURIComponent(u.searchParams.get("body") ?? ""), blob);
+    assert.equal(rep.url, "https://github.com/ranxianglei/billion-context/issues/new", "the external issue URL carries no diagnostics");
 });
 
 test("#3811 config host masking is unconditional — publish boundary ignores BILI_LOG_MASK_HOSTS", async (t) => {

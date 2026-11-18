@@ -67,6 +67,12 @@ test("#5096 handler: health answers 503 ok:false, pages answer 503 html with the
         assert.equal(page.status, 503);
         assert.match(page.headers.get("content-type") ?? "", /text\/html/);
         assert.ok((await page.text()).includes("combined-ca.pem"));
+        for (const pathname of ["/", "/__bili/", "/__bili/health"]) {
+            const denied = await fetch(origin + pathname, { headers: { origin: "https://untrusted.example.invalid" } });
+            assert.equal(denied.status, 403);
+            assert.equal(denied.headers.get("cache-control"), "no-store");
+            assert.equal(await denied.text(), "Access denied");
+        }
     } finally {
         server.close();
     }

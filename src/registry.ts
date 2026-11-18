@@ -2,6 +2,7 @@ import type { PriceProfile } from "acp-kernel";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
+import { publicMetadataRefreshEnabled } from "./knobs.js";
 import { cacheDir } from "./paths.js";
 import { log as loggerLog } from "./logger.js";
 import { proxyDispatcher } from "./upstream-proxy.js";
@@ -33,6 +34,7 @@ type LoadedRegistry = { reg: RegistryShape; costs: CostsShape | null };
 
 let cache: RegistryShape | null = null;
 let costCache: CostsShape | null = null;
+let loadedLocalSnapshot = false;
 let loading: Promise<RegistryShape | null> | null = null;
 const warnedConflicts = new Set<string>();
 const warnedPriceConflicts = new Set<string>();
@@ -226,6 +228,8 @@ async function fetchFresh(): Promise<LoadedRegistry | null> {
 
 export async function loadRegistry(): Promise<RegistryShape | null> {
     if (cache && cache !== snapshotReg) return cache;
+    const allowRefresh = publicMetadataRefreshEnabled();
+    if (!allowRefresh && loadedLocalSnapshot) return cache;
     if (diskCacheFresh()) {
         const disk = await readDiskCache();
         if (disk) {
@@ -241,7 +245,7 @@ export async function loadRegistry(): Promise<RegistryShape | null> {
     }
     if (loading) return loading;
     const pending = (async () => {
-        const fresh = await fetchFresh();
+        const fresh = allowRefresh ? await fetchFresh() : null;
         if (fresh) {
             cache = fresh.reg;
             costCache = fresh.costs;
@@ -255,7 +259,8 @@ export async function loadRegistry(): Promise<RegistryShape | null> {
         if (fallback) {
             cache = fallback.reg;
             costCache = fallback.costs;
-            loggerLog("info", `[acp-registry] ${fallback.label}; fetch failed`);
+            loadedLocalSnapshot = !allowRefresh && cache === snapshotReg;
+            loggerLog("info", `[acp-registry] ${fallback.label}`);
             return fallback.reg;
         }
         loggerLog("warn", `[acp-registry] could not load models.dev registry (offline + no cache + no snapshot)`);
@@ -637,6 +642,7 @@ function registryLookup(reg: RegistryShape | null, model: string, host?: string,
 
 export function _resetForTest(): void {
     cache = null;
+    loadedLocalSnapshot = false;
     costCache = null;
     loading = null;
     regLowerIdx = null;

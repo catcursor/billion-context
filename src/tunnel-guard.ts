@@ -67,7 +67,7 @@ const WORKER_INNER_TIMEOUT_MS = 2500;
 // main-pool success starts a new episode (the next wedge logs again).
 const WEDGE_LOG_INTERVAL_MS = 5 * 60 * 1000;
 
-export const BILI_TUNNEL_HEADER = "x-bili-tunnel";
+export { BILI_TUNNEL_HEADER } from "./server/admin-access.js";
 
 type IpClass = "loopback" | "linkLocal" | "private" | "public";
 
