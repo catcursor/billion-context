@@ -49,7 +49,7 @@ import { log as loggerLog } from "../logger.js";
 import { promptInputTotal, type WireProtocol } from "../util.js";
 import { DEGENERATE_RETRY_NUDGE } from "../degenerate-retry.js";
 import { endsWithAnnouncement, endsWithDraftClose, lastUserSummaryInstruction, requestExpectsProseSummary } from "../degenerate-turn.js";
-import { safePrefix, safeSuffix, scrubLoneSurrogateEscapesOnJson } from "../text-safe.js";
+import { safeSuffix, scrubLoneSurrogateEscapesOnJson } from "../text-safe.js";
 
 export const MAX_LOOP_ROUNDS = 10;
 
@@ -706,7 +706,7 @@ export async function* runCompressLoop(
                 // #189: correlate the rejection with the rewrite that
                 // preceded it (shrink ratio + fold point), if any.
                 const lc = lastCompressSuffix(ctx.session.lastCompress);
-                ctx.log(`[acp-proxy: upstream rejected replay (HTTP ${info.status}: ${info.detail.slice(0, 120)}); likely provider risk-control — retrying in ${info.delayMs}ms (attempt ${info.attempt}/${info.maxAttempts})${lc}]`);
+                ctx.log(`[acp-proxy: upstream rejected replay (HTTP ${info.status}); likely provider risk-control — retrying in ${info.delayMs}ms (attempt ${info.attempt}/${info.maxAttempts})${lc}]`);
                 loggerLog("warn", `[acp-loop] upstream rejected replay (HTTP ${info.status}); retrying in ${info.delayMs}ms (attempt ${info.attempt}/${info.maxAttempts})${lc}`);
             },
         );
@@ -1168,7 +1168,7 @@ export async function* runCompressLoop(
                     } catch (e) {
                         if (e instanceof UpstreamHttpError) {
                             const suffix = e.attempts > 1 ? ` after ${e.attempts} attempt(s)` : "";
-                            ctx.log(`[acp-loop] round ${round}: truncation retry failed (upstream error ${e.status}${suffix}: ${e.body.slice(0, 200)})`);
+                            ctx.log(`[acp-loop] round ${round}: truncation retry failed (upstream error ${e.status}${suffix})`);
                         } else {
                             ctx.log(`[acp-loop] round ${round}: truncation retry failed (${e instanceof Error ? e.message : String(e)})`);
                         }
@@ -1233,7 +1233,7 @@ export async function* runCompressLoop(
                         continue;
                     } catch (e) {
                         if (e instanceof UpstreamHttpError) {
-                            ctx.log(`[acp-loop] round ${round}: continuation retry failed (upstream error ${e.status}: ${e.body.slice(0, 200)}); falling back to the truncation error`);
+                            ctx.log(`[acp-loop] round ${round}: continuation retry failed (upstream error ${e.status}); falling back to the truncation error`);
                         } else {
                             ctx.log(`[acp-loop] round ${round}: continuation retry failed (${e instanceof Error ? e.message : String(e)}); falling back to the truncation error`);
                         }
@@ -1282,7 +1282,7 @@ export async function* runCompressLoop(
                         continue;
                     } catch (e) {
                         if (e instanceof UpstreamHttpError) {
-                            ctx.log(`[acp-loop] round ${round}: degenerate retry failed (upstream error ${e.status}: ${e.body.slice(0, 200)}); passing the empty turn through`);
+                            ctx.log(`[acp-loop] round ${round}: degenerate retry failed (upstream error ${e.status}); passing the empty turn through`);
                         } else {
                             ctx.log(`[acp-loop] round ${round}: degenerate retry failed (${e instanceof Error ? e.message : String(e)}); passing the empty turn through`);
                         }
@@ -1363,7 +1363,7 @@ export async function* runCompressLoop(
                         continue;
                     } catch (e) {
                         if (e instanceof UpstreamHttpError) {
-                            ctx.log(`[acp-loop] round ${round}: stalled-tail retry failed (upstream error ${e.status}: ${e.body.slice(0, 200)}); passing the turn through`);
+                            ctx.log(`[acp-loop] round ${round}: stalled-tail retry failed (upstream error ${e.status}); passing the turn through`);
                         } else {
                             ctx.log(`[acp-loop] round ${round}: stalled-tail retry failed (${e instanceof Error ? e.message : String(e)}); passing the turn through`);
                         }
@@ -1451,8 +1451,7 @@ export async function* runCompressLoop(
                         parsedArgs = call.arguments.length > 0 ? JSON.parse(call.arguments) : {};
                     } catch {
                         // #1306: an empty/truncated arguments string is wire-loss-shaped, bad JSON is model-shaped — log the shape so the two are separable in logs.
-                        // #1502: tail= alongside head= separates mid-string corruption from truncation; the raw string survives for the lenient parser.
-                        ctx.log(`[acp-loop] proxy tool ${call.name}: arguments not parseable JSON (len=${call.arguments.length}${call.arguments.length > 0 ? `, head=${safePrefix(call.arguments, 200)}, tail=${safeSuffix(call.arguments, 200)}` : ""}) — ${call.name === COMPRESS_TOOL_NAME ? "routing the raw string to the lenient parser" : "executing with {}"}; re-request replays a valid-JSON placeholder (#3661)`);
+                        ctx.log(`[acp-loop] proxy tool ${call.name}: arguments not parseable JSON (len=${call.arguments.length}) — ${call.name === COMPRESS_TOOL_NAME ? "routing the raw string to the lenient parser" : "executing with {}"}; re-request replays a valid-JSON placeholder (#3661)`);
                         rawArgs = call.arguments;
                         parsedArgs = {};
                     }
@@ -1862,8 +1861,8 @@ export async function* runCompressLoop(
                     degradedRetried = true;
                     const stripped = stripLoopThinking(coreMessages);
                     replaceMessages(coreMessages, stripped);
-                    ctx.log(`[acp-loop] round ${round}: re-request rejected (${e.status}: ${e.body.slice(0, 200)}); retrying without replayed thinking blocks`);
-                    loggerLog("warn", `[acp-loop] re-request rejected (${e.status}); retrying without thinking replay: ${e.body.slice(0, 200)}`);
+                    ctx.log(`[acp-loop] round ${round}: re-request rejected (${e.status}); retrying without replayed thinking blocks`);
+                    loggerLog("warn", `[acp-loop] re-request rejected (${e.status}); retrying without thinking replay`);
                     newBody = await buildLoopRequestBody();
                     respResult = await fetchUpstream(newBody);
                 }
@@ -1920,8 +1919,8 @@ export async function* runCompressLoop(
                     dumpRejectedBody(e.status, ctx.session.id ?? "unknown", JSON.stringify(newBody));
                 }
                 const suffix = e.attempts > 1 ? ` after ${e.attempts} attempt(s)` : "";
-                ctx.log(`[acp-proxy: compress loop upstream error ${e.status}${suffix}: ${e.body.slice(0, 200)}]`);
-                loggerLog("error", `[acp-loop] upstream error ${e.status}${suffix}: ${e.body.slice(0, 200)}`);
+                ctx.log(`[acp-proxy: compress loop upstream error ${e.status}${suffix}]`);
+                loggerLog("error", `[acp-loop] upstream error ${e.status}${suffix}`);
                 yield adapter.emitError(`upstream error ${e.status}${suffix}: ${e.body.slice(0, 200)}`);
                 return;
             }

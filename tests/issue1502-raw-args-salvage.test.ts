@@ -175,7 +175,7 @@ test("#1502 loop: unparseable-but-salvageable compress args execute instead of d
     }
 });
 
-test("#1502 loop: garbage args log head+tail and yield the corruption marker, not the empty-call verdict", async () => {
+test("#1502 loop: garbage args log only their length and yield the corruption marker", async () => {
     const garbage = '{"content": [{"startId": "m00001", "endId": "m00002", "summary": "some summary payload';
     const ctx = makeCtx();
     const round1 = mockStream(
@@ -202,7 +202,8 @@ test("#1502 loop: garbage args log head+tail and yield the corruption marker, no
             buildCompressSystemPrompt(),
         )) chunks.push(chunk);
         const output = Buffer.concat(chunks).toString("utf8");
-        assert.match(ctx.logs.join("\n"), /arguments not parseable JSON \(len=\d+, head=.*tail=/s, "diag log carries head+tail");
+        assert.match(ctx.logs.join("\n"), /arguments not parseable JSON \(len=\d+\)/);
+        assert.doesNotMatch(ctx.logs.join("\n"), /some summary payload/, "malformed arguments stay out of logs");
         assert.doesNotMatch(output, /executing with \{\}/, "old degradation wording gone");
         assert.match(output, /were not parseable JSON/, "corruption marker streamed to client");
         assert.doesNotMatch(output, /carried no content at all/, "not mislabeled as empty");

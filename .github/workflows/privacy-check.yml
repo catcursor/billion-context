@@ -22,6 +22,7 @@ jobs:
           node-version: 24
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run build
+      - run: node node_modules/typescript/bin/tsc --noEmit --project tsconfig.json
       - name: Run privacy regressions with isolated test data
         run: |
           node --import ./tests/preload-test-env.mjs --import tsx --test \
@@ -32,6 +33,8 @@ jobs:
             tests/issue5146-upstreams-endpoint.test.ts \
             tests/storage-private-permissions.test.ts \
             tests/storage-durability.test.ts \
+            tests/loop-core.test.ts \
+            tests/issue1502-raw-args-salvage.test.ts \
             tests/fix-config-session.test.ts \
             tests/registry-unsupported-proxy.test.ts \
             tests/remote-announcements.test.ts \

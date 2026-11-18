@@ -153,7 +153,7 @@ export async function compressLoopAnthropicJson(
             undefined,
             options.signal,
         ).catch((e) => {
-            if (e instanceof UpstreamHttpError) log(`[acp-proxy: non-stream anthropic loop upstream error ${e.status}: ${e.body.slice(0, 200)}]`);
+            if (e instanceof UpstreamHttpError) log(`[acp-proxy: non-stream anthropic loop upstream error ${e.status}]`);
             throw e;
         });
         try {

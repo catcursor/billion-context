@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { setLogCapture } from "../src/logger.ts";
 import assert from "node:assert/strict";
 import type { Config, CoreMessage } from "acp-kernel";
 import { createCore, createInitialState, assignRefs, emptyRefMap, defaultConfig } from "acp-kernel";
@@ -508,6 +509,10 @@ test("replay retry: transient 400 (captcha) then success → retried, no error s
 
 test("replay retry: persistent captcha 400 → bounded retries, error names attempt count", async () => {
     process.env.BILI_REPLAY_RETRY_BASE_MS = "1";
+    const logs: string[] = [];
+    const ctx = replayCtx();
+    ctx.log = (message) => { logs.push(message); };
+    setLogCapture((_level, message) => { logs.push(message); });
     let fetchCalls = 0;
     const orig = globalThis.fetch;
     globalThis.fetch = (async () => {
@@ -517,14 +522,18 @@ test("replay retry: persistent captcha 400 → bounded retries, error names atte
     try {
         const out = await drain(
             new Response(compressRound(), { status: 200 }).body!,
-            replayCtx(),
+            ctx,
             { model: "gpt-4o", input: [], stream: true },
             { url: "http://mock", headers: {} },
         );
         assert.equal(fetchCalls, REPLAY_MAX_ATTEMPTS, "retries are bounded");
         assert.ok(out.includes("upstream error 400"), "error surfaced to client");
         assert.ok(out.includes(`after ${REPLAY_MAX_ATTEMPTS} attempt(s)`), "attempt count in error message");
+        assert.match(out, /captcha verify failed/, "client receives the provider's error detail");
+        assert.match(logs.join("\n"), /upstream error 400/);
+        assert.doesNotMatch(logs.join("\n"), /captcha verify failed/, "retry and terminal logs omit the provider body");
     } finally {
+        setLogCapture(null);
         delete process.env.BILI_REPLAY_RETRY_BASE_MS;
         globalThis.fetch = orig;
     }

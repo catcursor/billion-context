@@ -17,7 +17,6 @@ import { MAX_LOOP_ROUNDS } from "./loop/index.js";
 import { stripResponsesText } from "./loop/tag-echo-filter.js";
 import { fetchWithRetry, UpstreamHttpError } from "./fetch-util.js";
 import { proxyDispatcher } from "./upstream-proxy.js";
-import { safePrefix, safeSuffix } from "./text-safe.js";
 
 interface CompressLoopResponsesCtx {
     signal?: AbortSignal;
@@ -117,7 +116,7 @@ async function surfaceProxyJson(
         } catch {
             // #1502: same root cause as loop/core.ts — keep the raw string so corrupt compress arguments reach the kernel's lenient salvage ladder instead of {}.
             rawArgs = call.arguments;
-            loggerLog("warn", `[acp-compress-args] ${call.name} JSON.parse failed (len=${call.arguments.length}, head=${safePrefix(call.arguments, 200)}, tail=${safeSuffix(call.arguments, 200)})`);
+            loggerLog("warn", `[acp-compress-args] ${call.name} JSON.parse failed (len=${call.arguments.length})`);
         }
         let result: string;
         try {
@@ -125,10 +124,10 @@ async function surfaceProxyJson(
                 ? await withSessionLock(ctx.session, () => executeProxyToolAsync(call.name, args, ctx, call.callId, rawArgs, ctx.signal))
                 : await executeProxyToolAsync(call.name, args, ctx, call.callId, rawArgs, ctx.signal);
             result = toolResult.text;
-            ctx.log(`[acp-proxy: responses JSON ${call.name}${mutating ? "" : " (read-only)"} → ${result.slice(0, 120).replace(/\n/g, " ")}]`);
+            ctx.log(`[acp-proxy: responses JSON ${call.name}${mutating ? "" : " (read-only)"} (result length=${result.length})]`);
         } catch (e) {
             result = `\u274c [ACP] ${call.name} FAILED: ${String(e)}`;
-            ctx.log(`[acp-proxy: responses JSON ${call.name}${mutating ? "" : " (read-only)"} FAILED: ${String(e)}]`);
+            ctx.log(`[acp-proxy: responses JSON ${call.name}${mutating ? "" : " (read-only)"} FAILED]`);
         }
         if (ctx.visibilityMarkers !== false) markers.push(buildVisibilityMarker(call.name, result));
     }
@@ -194,13 +193,13 @@ export async function compressLoopResponsesJson(
             let rawArgs: string | undefined;
             try {
                 args = JSON.parse(call.arguments) as Record<string, unknown>;
-            } catch (error) {
+            } catch {
                 // #1502: keep the raw string so corrupt compress arguments reach the kernel's lenient salvage ladder instead of {}.
-                loggerLog("warn", `[acp-compress-args] ${call.name} JSON.parse failed: ${String(error)} (len=${call.arguments.length}, head=${safePrefix(call.arguments, 200)}, tail=${safeSuffix(call.arguments, 200)})`);
+                loggerLog("warn", `[acp-compress-args] ${call.name} JSON.parse failed (len=${call.arguments.length})`);
                 rawArgs = call.arguments;
             }
-                const toolResult = await withSessionLock(ctx.session, () => executeProxyToolAsync(call.name, args, ctx, call.callId, rawArgs, ctx.signal));
-            ctx.log(`[acp-proxy: responses JSON ${call.name} → ${toolResult.text.slice(0, 120).replace(/\n/g, " ")}]`);
+            const toolResult = await withSessionLock(ctx.session, () => executeProxyToolAsync(call.name, args, ctx, call.callId, rawArgs, ctx.signal));
+            ctx.log(`[acp-proxy: responses JSON ${call.name} (result length=${toolResult.text.length})]`);
             if (ctx.visibilityMarkers !== false) inputItems.push({ type: "message", role: "user", content: buildVisibilityMarker(call.name, toolResult.text) });
         }
         // #1097: retrieval injections ride the re-request after their ack —
@@ -230,13 +229,13 @@ export async function compressLoopResponsesJson(
         }, undefined, undefined, (info) => {
             // #189: correlate the rejection with the rewrite that preceded it.
             const lc = lastCompressSuffix(ctx.session.lastCompress);
-            ctx.log(`[acp-proxy: responses upstream rejected replay (HTTP ${info.status}: ${info.detail.slice(0, 120)}); likely provider risk-control — retrying in ${info.delayMs}ms (attempt ${info.attempt}/${info.maxAttempts})${lc}]`);
+            ctx.log(`[acp-proxy: responses upstream rejected replay (HTTP ${info.status}); likely provider risk-control — retrying in ${info.delayMs}ms (attempt ${info.attempt}/${info.maxAttempts})${lc}]`);
             loggerLog("warn", `[acp-compress-responses] upstream rejected replay (HTTP ${info.status}); retrying in ${info.delayMs}ms (attempt ${info.attempt}/${info.maxAttempts})${lc}`);
         }).catch((e) => {
             if (e instanceof UpstreamHttpError) {
                 const suffix = e.attempts > 1 ? ` after ${e.attempts} attempt(s)` : "";
-                ctx.log(`[acp-proxy: responses compress loop upstream error ${e.status}${suffix}: ${e.body.slice(0, 200)}]`);
-                loggerLog("error", `[acp-compress-responses] upstream error ${e.status}${suffix}: ${e.body.slice(0, 200)}`);
+                ctx.log(`[acp-proxy: responses compress loop upstream error ${e.status}${suffix}]`);
+                loggerLog("error", `[acp-compress-responses] upstream error ${e.status}${suffix}`);
             }
             throw e;
         });
