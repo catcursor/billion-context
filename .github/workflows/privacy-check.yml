@@ -1,0 +1,68 @@
+name: Privacy checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - privacy-hardening
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build
+      - name: Run privacy regressions with isolated test data
+        run: |
+          node --import ./tests/preload-test-env.mjs --import tsx --test \
+            tests/admin-probe.test.ts \
+            tests/dsh-panel-embed-cors.test.ts \
+            tests/issue3343-marker-divert-gate.test.ts \
+            tests/issue5096-startup-failure-page.test.ts \
+            tests/issue5146-upstreams-endpoint.test.ts \
+            tests/storage-private-permissions.test.ts \
+            tests/storage-durability.test.ts \
+            tests/fix-config-session.test.ts \
+            tests/registry-unsupported-proxy.test.ts \
+            tests/remote-announcements.test.ts \
+            tests/web-blog-refresh.test.ts \
+            tests/web-changelog.test.ts \
+            tests/web-diagnostics-attribution-topic.test.ts \
+            tests/web-diagnostics-enrichment.test.ts \
+            tests/web-diagnostics-unicode.test.ts \
+            tests/web-storage-banner.test.ts \
+            tests/web-storage-diagnostics-redaction.test.ts
+
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker build --tag bili-privacy-check .
+      - name: Check the container's health probe on its isolated loopback
+        run: |
+          docker run --detach --name privacy-smoke --network none \
+            --health-interval 2s --health-start-period 5s bili-privacy-check
+          for attempt in {1..45}; do
+            case "$(docker inspect --format '{{.State.Health.Status}}' privacy-smoke)" in
+              healthy) exit 0 ;;
+              unhealthy) break ;;
+            esac
+            sleep 2
+          done
+          docker logs privacy-smoke
+          exit 1
+      - if: always()
+        run: docker rm -fv privacy-smoke || true

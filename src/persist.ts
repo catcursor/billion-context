@@ -1,11 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { closeSync, constants, existsSync, fchmodSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import * as path from "node:path";
 const { join } = path;
 import { StateStore, flatFileNameFor, type PersistedEnvelope, type StateStoreCodec } from "acp-kernel/persist";
 import type { BiliMessage } from "acp-kernel/wire";
-import { sessionsDir } from "./paths.js";
+import { dataDir, sessionsDir } from "./paths.js";
 import {
     persistEnabled as knobPersistEnabled,
     persistZstdEnabled as knobPersistZstdEnabled,
@@ -320,10 +320,9 @@ export function relPathFor(id: string, protocol?: string, upstreamOrigin?: strin
  *  a size-correct, VDL=0 all-zero file on disk (#3157). The fsync makes the DATA
  *  durable before the caller's rename publishes the name. Mirrors the repo's
  *  existing atomicWriteConfig / credential-store idiom and the kernel
- *  StateStore.atomicWriteDurable. `mode` applies on create (as writeFileSync's
- *  mode option does). */
-function durableWriteFile(file: string, data: Buffer | string, mode?: number): void {
-    const fd = openSync(file, "w", mode);
+ *  StateStore.atomicWriteDurable. */
+function durableWriteFile(file: string, data: Buffer | string): void {
+    const fd = openSync(file, "wx", 0o600);
     try {
         writeFileSync(fd, data);
         fsyncSync(fd);
@@ -624,6 +623,19 @@ export class SessionStore {
         this.enabled = (opts?.enabled ?? true) && debounceMs >= 0;
         this.debounceMs = Math.max(0, debounceMs);
         this.sessionsDir = opts?.dir ?? defaultDir();
+        if (this.enabled && process.platform !== "win32" && this.sessionsDir === path.join(dataDir(), "sessions")) {
+            // Protect historical envelopes and journals without changing user-supplied directories.
+            mkdirSync(this.sessionsDir, { recursive: true, mode: 0o700 });
+            if (!lstatSync(this.sessionsDir).isSymbolicLink()) {
+                const fd = openSync(this.sessionsDir, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+                try {
+                    const mode = fstatSync(fd).mode;
+                    if (mode & 0o077) fchmodSync(fd, mode & 0o700);
+                } finally {
+                    closeSync(fd);
+                }
+            }
+        }
         const baseLog = opts?.log ?? defaultLogger;
         this.log = baseLog;
         // #708/#1080: env-only storage policy (a key file next to the data
@@ -900,7 +912,7 @@ export class SessionStore {
             }
             mkdirSync(path.dirname(abs), { recursive: true });
             const text = JSON.stringify(session.contentStore);
-            durableWriteFile(tmp, this.codec ? this.codec.encode(text) : text, 0o600);
+            durableWriteFile(tmp, this.codec ? this.codec.encode(text) : text);
             renameSync(tmp, abs);
             session.contentStoreDirty = false;
             return true;

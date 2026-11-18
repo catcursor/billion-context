@@ -510,8 +510,8 @@ export class UnifiedStore {
         engine?: SqliteEngineName,
         opts?: { walJournalSizeLimitBytes?: number },
     ): UnifiedStore {
-        mkdirSync(dirname(path), { recursive: true });
-        const { db, engine: used, source } = openSqliteDatabase(path, engine);
+        mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+        const { db, engine: used, source } = openSqliteDatabase(path, engine, { privateFile: true });
         // The pre-migration quick_check below runs BEFORE the storagePragmas
         // loop installs the connection's busy handler — on a bare handle the
         // first statement throws raw SQLITE_BUSY the instant a concurrent
@@ -817,12 +817,24 @@ export class UnifiedStore {
      * length.
      */
     backupInto(dstPath: string): number {
-        if (existsSync(dstPath)) {
-            throw new Error(`[storage] backup target already exists: ${dstPath}`);
+        mkdirSync(dirname(dstPath), { recursive: true, mode: 0o700 });
+        // VACUUM INTO accepts an empty destination. Reserve the name and mode
+        // atomically before SQLite writes the first page of conversation history.
+        try {
+            closeSync(openSync(dstPath, "wx", 0o600));
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+                throw new Error(`[storage] backup target already exists: ${dstPath}`);
+            }
+            throw err;
         }
-        mkdirSync(dirname(dstPath), { recursive: true });
         const quoted = dstPath.replace(/'/g, "''");
-        this.db.exec(`VACUUM INTO '${quoted}'`);
+        try {
+            this.db.exec(`VACUUM INTO '${quoted}'`);
+        } catch (err) {
+            try { unlinkSync(dstPath); } catch { /* best effort */ }
+            throw err;
+        }
         recordBackupOutcome(dstPath, statSync(dstPath).size);
         return statSync(dstPath).size;
     }
@@ -2200,7 +2212,7 @@ export class UnifiedStore {
             const c = this.db.prepare("SELECT bytes FROM content WHERE hash = ?").get(hash) as { bytes: Buffer | Uint8Array } | undefined;
             if (c) content[hash as string] = Buffer.from(c.bytes).toString("utf8");
         }
-        mkdirSync(opts.archiveDir, { recursive: true });
+        mkdirSync(opts.archiveDir, { recursive: true, mode: 0o700 });
         // One JSONL line per archived session: append-only (cheap, crash =
         // at worst one truncated line which the reader skips), restore
         // rewrites the file without the restored session's lines.
@@ -2234,7 +2246,7 @@ export class UnifiedStore {
             // #4796 follow-up: scoped collection (see collectZeroRefIn) —
             // the reported count is what THIS archive collected.
             contentRowsDeleted = this.collectZeroRefIn(rel);
-            appendFileSync(exportPath, archiveLine);
+            appendFileSync(exportPath, archiveLine, { mode: 0o600 });
         });
         loggerLog("info", `[#3901] archived ${sessionId} → ${exportPath} (${contentRowsDeleted} content rows collected)`);
         return { ok: true, exportPath, contentRowsDeleted };
@@ -2412,8 +2424,8 @@ export class UnifiedStore {
             const c = this.db.prepare("SELECT bytes FROM content WHERE hash = ?").get(hash) as { bytes: Buffer | Uint8Array } | undefined;
             if (c) content[hash] = Buffer.from(c.bytes).toString("utf8");
         }
-        mkdirSync(opts.archiveDir, { recursive: true });
-        appendFileSync(exportPath, JSON.stringify({ version: 1, sessionId, blockId, archivedAt: Date.now(), block: row, content }) + "\n");
+        mkdirSync(opts.archiveDir, { recursive: true, mode: 0o700 });
+        appendFileSync(exportPath, JSON.stringify({ version: 1, sessionId, blockId, archivedAt: Date.now(), block: row, content }) + "\n", { mode: 0o600 });
         let contentRowsDeleted = 0;
         this.db.transaction(() => {
             this.db.prepare("DELETE FROM blocks WHERE session_id = ? AND block_id = ?").run(sessionId, blockId);

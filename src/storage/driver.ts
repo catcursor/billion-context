@@ -36,6 +36,8 @@
  * engine-agnostic SQL; nothing below it leaks into the store.
  */
 
+import { closeSync, openSync } from "node:fs";
+
 interface SqliteRunResult {
     readonly changes: number;
     readonly lastInsertRowid: number | bigint;
@@ -470,11 +472,20 @@ function loadHostBetterSqlite3(): BetterSqlite3Ctor {
     return require("better-sqlite3") as unknown as BetterSqlite3Ctor;
 }
 
-export function openSqliteDatabase(path: string, engine?: SqliteEngineName): OpenedDatabase {
+export function openSqliteDatabase(path: string, engine?: SqliteEngineName, options?: { privateFile: boolean }): OpenedDatabase {
     if (enginesUnavailableForTests) {
         throw new SqliteDriverError("no SQLite engine available", "node:sqlite");
     }
     const resolved = engine ? { name: engine, source: (engine === "node:sqlite" || engine === "bun:sqlite" ? "builtin" : "host") as SqliteEngineSource } : detectEngine();
+    if (options?.privateFile && process.platform !== "win32" && path && path !== ":memory:") {
+        // SQLite inherits the main file mode for new journals. Never open and close
+        // an existing database here: POSIX locks can belong to another live handle.
+        try {
+            closeSync(openSync(path, "wx", 0o600));
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+        }
+    }
     if (resolved.name === "bun:sqlite") {
         try {
             return { db: openBunSqlite(path), engine: resolved.name, source: resolved.source };

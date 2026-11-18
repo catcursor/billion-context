@@ -1827,7 +1827,7 @@ export class MysqlBackend implements StorageBackend {
             const c = await this.getContent(this.pool, hash);
             if (c !== null) content[hash] = c;
         }
-        mkdirSync(opts.archiveDir, { recursive: true });
+        mkdirSync(opts.archiveDir, { recursive: true, mode: 0o700 });
         // sqlite twin: appended as the last step inside the sweep
         // transaction, so a failed sweep leaves no line for a session that
         // is still active.
@@ -1860,7 +1860,7 @@ export class MysqlBackend implements StorageBackend {
             // #4796 follow-up: scoped collection (see collectZeroRefIn) —
             // the reported count is what THIS archive collected.
             contentRowsDeleted = await this.collectZeroRefIn(c, rel);
-            appendFileSync(exportPath, archiveLine);
+            appendFileSync(exportPath, archiveLine, { mode: 0o600 });
         });
         loggerLog("info", `[#3931] archived ${sessionId} → ${exportPath} (${contentRowsDeleted} content rows collected)`);
         return { ok: true, exportPath, contentRowsDeleted };
